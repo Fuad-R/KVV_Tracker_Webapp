@@ -118,35 +118,3 @@ tr:hover {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
-
-/* ------------------- Station selection list ------------------- */
-#stationList {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.station-option {
-    padding: 15px;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    cursor: pointer;
-    background-color: #f9f9f9;
-    transition: background-color 0.2s;
-}
-
-.station-option:hover {
-    background-color: #e8f0ff;
-}
-
-.station-option-name {
-    font-weight: bold;
-    font-size: 16px;
-}
-
-.station-option-id {
-    color: #666;
-    font-size: 12px;
-    margin-top: 5px;
-}
