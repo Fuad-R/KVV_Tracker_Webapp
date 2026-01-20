@@ -118,3 +118,24 @@ tr:hover {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* ------------------- Station Selection ------------------- */
+.station-option {
+    padding: 12px;
+    border: 1px solid #ddd;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.station-option:hover {
+    background-color: #f0f0f0;
+    border-color: #3498db;
+    transform: translateX(4px);
+}
+
+#stationList {
+    max-height: 400px;
+    overflow-y: auto;
+}

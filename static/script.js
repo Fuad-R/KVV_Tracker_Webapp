@@ -73,6 +73,13 @@ async function fetchDepartures() {
         document.getElementById("stationHeader").innerText =
             result.station_name;
 
+        // Handle multiple stations
+        if (result.all_stations) {
+            populateStationDropdown(result.all_stations);
+        } else {
+            document.getElementById("stationDropdown").style.display = "none";
+        }
+
         lastDepartures = result.departures;
         populateTable(result.departures);
         countdown = 30;
@@ -85,7 +92,7 @@ async function fetchDepartures() {
 
 async function fetchDeparturesById() {
     try {
-        const res = await fetch(`/search_by_id?stop_id=${stopId}`);
+        const res = await fetch(`/search_by_id?stop_id=${stopId}&station_name=${encodeURIComponent(stopName)}`);
         const result = await res.json();
 
         if (result.error) {
@@ -270,6 +277,69 @@ window.addEventListener("click", function(event) {
     }
 });
 
+// ------------------ STATION DROPDOWN ------------------
+
+function populateStationDropdown(stations) {
+    const dropdown = document.getElementById("stationDropdown");
+    dropdown.innerHTML = "";
+
+    stations.forEach((station, index) => {
+        const option = document.createElement("option");
+        option.value = JSON.stringify({ id: station.id, name: station.name });
+        option.textContent = station.name;
+        if (index === 0) {
+            option.selected = true;
+        }
+        dropdown.appendChild(option);
+    });
+
+    dropdown.style.display = "inline-block";
+}
+
+function switchStation() {
+    const dropdown = document.getElementById("stationDropdown");
+    const selected = JSON.parse(dropdown.value);
+    quickSearchById(selected.id, selected.name);
+}
+
+// ------------------ STATION SELECTION POPUP ------------------
+
+function showStationSelect(stations) {
+    const stationList = document.getElementById("stationList");
+    stationList.innerHTML = "";
+
+    stations.forEach((station) => {
+        const option = document.createElement("div");
+        option.className = "station-option";
+        option.innerHTML = `
+            <strong>${station.name}</strong><br>
+            <small>ID: ${station.id}</small>
+        `;
+        option.onclick = () => {
+            closeStationSelect();
+            quickSearchById(station.id, station.name);
+        };
+        stationList.appendChild(option);
+    });
+
+    document.getElementById("stationSelectPopup").style.display = "block";
+}
+
+function closeStationSelect() {
+    document.getElementById("stationSelectPopup").style.display = "none";
+}
+
+// Close station select popup when clicking outside
+window.addEventListener("click", function(event) {
+    const popup = document.getElementById("stationSelectPopup");
+    if (
+        popup.style.display === "block" &&
+        !popup.querySelector(".popup-content").contains(event.target)
+    ) {
+        popup.style.display = "none";
+    }
+});
+
 // ------------------ ENTER KEY SEARCH ------------------
 
 // Trigger search when user presses Enter in stop input
@@ -277,4 +347,10 @@ document.getElementById("stopInput").addEventListener("keypress", function(event
     if (event.key === "Enter") {
         searchStop();
     }
+});
+
+// ------------------ INITIALIZATION ------------------
+
+window.addEventListener("DOMContentLoaded", function() {
+    quickSearch("Hauptbahnhof Vorplatz");
 });

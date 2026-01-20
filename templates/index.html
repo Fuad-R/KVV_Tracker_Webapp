@@ -17,6 +17,7 @@
         <input type="text" id="stopInput" placeholder="Enter stop name">
         <button onclick="searchStop()">Search</button>
         <span id="countdown">Next update in: -- s</span>
+        <select id="stationDropdown" style="display:none;" onchange="switchStation()"></select>
     </div>
 
     <!-- Quick Stations -->
@@ -31,12 +32,6 @@
             Europaplatz
         </button>
 
-        <!-- SPECIAL CASE: direct station ID  DEPRICATED--> 
-		<!--
-        <button onclick="quickSearchById('7001011', 'Karlsruhe, Marktplatz (Pyramide)')">
-            Marktplatz (Pyramide)
-        </button>
-		--!>
         <button onclick="quickSearch('Marktplatz')">
             Marktplatz (Kaiserstr.) (Pl 1/2 Kaiserstr., 3/4 Pyramide')
         </button>
@@ -78,7 +73,7 @@
     </table>
 </div>
 
-<!-- Popup -->
+<!-- Popup for future departures -->
 <div id="popup" class="popup">
     <div class="popup-content">
         <span class="close" onclick="closePopup()">&times;</span>
@@ -94,6 +89,15 @@
             </thead>
             <tbody></tbody>
         </table>
+    </div>
+</div>
+
+<!-- Popup for station selection -->
+<div id="stationSelectPopup" class="popup">
+    <div class="popup-content">
+        <span class="close" onclick="closeStationSelect()">&times;</span>
+        <h2>Select Station</h2>
+        <div id="stationList"></div>
     </div>
 </div>
 

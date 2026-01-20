@@ -64,7 +64,7 @@ def search():
 
         # Take the first match
         stop_id = stops[0]["id"]
-        station_name_actual = stops[0]["name"]  # <-- actual API name
+        station_name_actual = stops[0]["name"]
 
         # Get departures
         data = get_stop_departures(stop_id)
@@ -78,10 +78,11 @@ def search():
                 dt = datetime.now() + timedelta(minutes=d["minutes_remaining"])
                 d["departure_display"] = dt.strftime("%H:%M")
 
-        # Return station name from API
+        # Return all stops and first station's departures
         return jsonify({
             "station_name": station_name_actual,
-            "departures": data
+            "departures": data,
+            "all_stations": stops if len(stops) > 1 else None
         })
 
     except Exception as e:
@@ -91,13 +92,17 @@ def search():
 @app.route("/search_by_id")
 def search_by_id():
     stop_id = request.args.get("stop_id")
+    station_name = request.args.get("station_name")
+
     if not stop_id:
         return jsonify({"error": "Stop ID required"}), 400
 
     try:
         data = get_stop_departures(stop_id)
 
-        station_name = data[0].get("stop_name", "Unknown station") if data else "Unknown station"
+        # Use provided station name, fallback to API data
+        if not station_name:
+            station_name = data[0].get("stop_name", "Unknown station") if data else "Unknown station"
 
         for d in data:
             d["color"] = line_color(d["line"])
