@@ -3,7 +3,8 @@ let stopId = null;
 let countdown = 30;
 let countdownInterval;
 let refreshInterval;
-let lastDepartures = []; // store last fetched departures for filtering
+let lastDepartures = [];
+const FAVORITES_KEY = 'kvv_favorites';
 
 // ------------------ SEARCH (BY NAME) ------------------
 
@@ -81,8 +82,14 @@ async function fetchDepartures() {
             return;
         }
 
-        document.getElementById("stationHeader").innerText =
-            result.station_name;
+        const fullStationName = result.station_name;
+        document.getElementById("stationHeader").innerText = fullStationName;
+
+        // Store the full station name and ID from API
+        stopName = fullStationName;
+        if (result.departures.length > 0) {
+            stopId = result.departures[0].stop_id;
+        }
 
         // Handle multiple stations
         if (result.all_stations) {
@@ -94,6 +101,7 @@ async function fetchDepartures() {
         lastDepartures = result.departures;
         applyFilter();
         countdown = 30;
+        updateFavoriteButton();
     } catch (e) {
         console.error(e);
     } finally {
@@ -121,6 +129,7 @@ async function fetchDeparturesById() {
         lastDepartures = result.departures;
         applyFilter();
         countdown = 30;
+        updateFavoriteButton();
     } catch (e) {
         console.error(e);
     } finally {
@@ -462,6 +471,150 @@ window.addEventListener("click", function(event) {
     }
 });
 
+// ------------------ FAVORITES ------------------
+
+function getFavorites() {
+    const stored = localStorage.getItem(FAVORITES_KEY);
+    return stored ? JSON.parse(stored) : [];
+}
+
+function saveFavorites(favorites) {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+}
+
+function isFavorite(id, name) {
+    return getFavorites().some(fav => fav.id === id && fav.name === name);
+}
+
+// Helper function to clean station name (display city info after comma)
+function cleanStationName(fullName) {
+    const parts = fullName.split(',');
+    if (parts.length > 1) {
+        return parts[1].trim();
+    }
+    return parts[0].trim();
+}
+
+function toggleFavorite() {
+    if (!stopName || stopId === null) {
+        // If no station loaded yet, show message
+        if (!lastDepartures.length) {
+            alert('Please search for a station first');
+            return;
+        }
+    }
+
+    const favorites = getFavorites();
+    const cleanedName = cleanStationName(stopName);
+    const index = favorites.findIndex(fav => fav.id === stopId && fav.name === cleanedName);
+
+    if (index > -1) {
+        // Remove from favorites
+        favorites.splice(index, 1);
+    } else {
+        // Add to favorites with cleaned station name and ID from API
+        favorites.push({
+            id: stopId,
+            name: cleanedName
+        });
+    }
+
+    saveFavorites(favorites);
+    updateFavoriteButton();
+    updateFavoritesDisplay();
+}
+
+function updateFavoriteButton() {
+    const btn = document.getElementById('favoriteBtn');
+    const cleanedName = cleanStationName(stopName);
+    const isFav = isFavorite(stopId, cleanedName);
+
+    if (isFav) {
+        btn.classList.add('favorite-active');
+        btn.setAttribute('title', 'Remove from favorites');
+    } else {
+        btn.classList.remove('favorite-active');
+        btn.setAttribute('title', 'Add to favorites');
+    }
+}
+
+function updateFavoritesDisplay() {
+    const favorites = getFavorites();
+    const section = document.getElementById('favoritesSection');
+    const grid = document.getElementById('favoritesGrid');
+
+    if (favorites.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+    grid.innerHTML = '';
+
+    favorites.forEach((fav, index) => {
+        const btnWrapper = document.createElement('div');
+        btnWrapper.className = 'favorite-btn-wrapper';
+
+        const btn = document.createElement('button');
+        btn.className = 'favorite-quick-btn';
+        btn.innerText = fav.name;
+        btn.title = fav.name;
+        btn.onclick = (e) => {
+            if (e.target.closest('.remove-favorite-x')) return;
+            quickSearchById(fav.id, fav.name);
+        };
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'remove-favorite-x';
+        removeBtn.innerHTML = '×';
+        removeBtn.title = 'Remove from favorites';
+        removeBtn.onclick = (e) => {
+            e.stopPropagation();
+            removeFavorite(index);
+        };
+
+        btnWrapper.appendChild(btn);
+        btnWrapper.appendChild(removeBtn);
+        grid.appendChild(btnWrapper);
+    });
+}
+
+function showManageFavorites() {
+    const favorites = getFavorites();
+    const stationList = document.getElementById('stationList');
+    stationList.innerHTML = '';
+
+    const modalTitle = document.querySelector('.modal-title');
+    modalTitle.innerText = 'Manage Favorites';
+
+    if (favorites.length === 0) {
+        stationList.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">No favorites yet</p>';
+    } else {
+        favorites.forEach((fav, index) => {
+            const option = document.createElement('div');
+            option.className = 'favorite-manage-item';
+            option.innerHTML = `
+                <div class="favorite-manage-info">
+                    <strong>${fav.name}</strong>
+                    <div style="font-size: 12px; color: var(--text-tertiary);">ID: ${fav.id}</div>
+                </div>
+                <button class="remove-favorite-btn" onclick="removeFavorite(${index})">Remove</button>
+            `;
+            stationList.appendChild(option);
+        });
+    }
+
+    document.getElementById('stationSelectPopup').style.display = 'block';
+}
+
+function removeFavorite(index) {
+    const favorites = getFavorites();
+    favorites.splice(index, 1);
+    saveFavorites(favorites);
+    updateFavoriteButton();
+    updateFavoritesDisplay();
+}
+
 // ------------------ INITIALIZATION ------------------
 
 window.addEventListener("DOMContentLoaded", function() {
@@ -472,5 +625,6 @@ window.addEventListener("DOMContentLoaded", function() {
         }
     });
 
+    updateFavoritesDisplay();
     quickSearch("Hauptbahnhof Vorplatz");
 });

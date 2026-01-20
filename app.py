@@ -69,9 +69,10 @@ def search():
         # Get departures
         data = get_stop_departures(stop_id)
 
-        # Add color & formatted departure
+        # Add color, stop_id & formatted departure
         for d in data:
             d["color"] = line_color(d["line"])
+            d["stop_id"] = stop_id
             if d["minutes_remaining"] <= MAX_MINUTES:
                 d["departure_display"] = str(d["minutes_remaining"])
             else:
@@ -106,6 +107,7 @@ def search_by_id():
 
         for d in data:
             d["color"] = line_color(d["line"])
+            d["stop_id"] = stop_id
             if d["minutes_remaining"] <= MAX_MINUTES:
                 d["departure_display"] = str(d["minutes_remaining"])
             else:
