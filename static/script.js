@@ -17,6 +17,7 @@ function searchStop() {
     // Reset filters when searching a new station
     document.getElementById("lineFilter").value = "";
     document.getElementById("typeFilter").value = "";
+    document.getElementById("wheelchairFilter").checked = false;
 
     fetchDepartures();
 
@@ -47,6 +48,7 @@ function quickSearchById(id, displayName) {
     // Reset filters when searching a new station
     document.getElementById("lineFilter").value = "";
     document.getElementById("typeFilter").value = "";
+    document.getElementById("wheelchairFilter").checked = false;
 
     fetchDeparturesById();
 
@@ -178,10 +180,12 @@ function getLineIcon(line) {
 function applyFilter() {
     const lineFilter = document.getElementById("lineFilter").value.trim();
     const typeFilter = document.getElementById("typeFilter").value;
+    const wheelchairFilter = document.getElementById("wheelchairFilter").checked;
 
     const filtered = lastDepartures.filter(d => {
         let lineMatch = true;
         let typeMatch = true;
+        let wheelchairMatch = true;
 
         // Line filter
         if (lineFilter) {
@@ -204,7 +208,12 @@ function applyFilter() {
                 typeMatch = !isSbahn && lineNumber >= 10;
         }
 
-        return lineMatch && typeMatch;
+        // Wheelchair filter
+        if (wheelchairFilter) {
+            wheelchairMatch = d.wheelchair_accessible === true;
+        }
+
+        return lineMatch && typeMatch && wheelchairMatch;
     });
 
     populateTable(filtered);
@@ -297,8 +306,8 @@ function populateTable(data) {
                     ? 'Arriving now'
                     : d.departure_display;
 
-                const wheelchairEmoji = d.wheelchair_accessible === true || d.wheelchair_accessible === "true"
-                    ? ' ♿'
+                const wheelchairIcon = d.wheelchair_accessible === true || d.wheelchair_accessible === "true"
+                    ? '<span class="departure-wheelchair-icon">♿</span>'
                     : '';
 
                 card.innerHTML = `
@@ -310,7 +319,7 @@ function populateTable(data) {
                         </div>
                     </div>
                     <div class="time-section">
-                        <div class="departure-time">${departureDisplay}${wheelchairEmoji}</div>
+                        <div class="departure-time">${departureDisplay}${wheelchairIcon}</div>
                         ${realtimeBadge}
                     </div>
                 `;
@@ -372,13 +381,13 @@ async function showFuture(line, direction) {
             item.className = "future-item";
 
             const realtimeText = d.is_realtime ? 'Real-time' : 'Scheduled';
-            const wheelchairEmoji = d.wheelchair_accessible === true || d.wheelchair_accessible === "true"
-                ? ' ♿'
+            const wheelchairIcon = d.wheelchair_accessible === true || d.wheelchair_accessible === "true"
+                ? '<span class="future-wheelchair-icon">♿</span>'
                 : '';
 
             item.innerHTML = `
                 <div>
-                    <div class="future-time">${d.departure_display}${wheelchairEmoji}</div>
+                    <div class="future-time">${d.departure_display}${wheelchairIcon}</div>
                     <div class="future-platform">Platform ${d.platform}</div>
                 </div>
                 <div class="future-realtime">${realtimeText}</div>
@@ -566,8 +575,7 @@ function updateFavoritesDisplay() {
         btn.className = 'favorite-quick-btn';
         btn.innerText = fav.name;
         btn.title = fav.name;
-        btn.onclick = (e) => {
-            if (e.target.closest('.remove-favorite-x')) return;
+        btn.onclick = () => {
             quickSearchById(fav.id, fav.name);
         };
 
@@ -584,34 +592,6 @@ function updateFavoritesDisplay() {
         btnWrapper.appendChild(removeBtn);
         grid.appendChild(btnWrapper);
     });
-}
-
-function showManageFavorites() {
-    const favorites = getFavorites();
-    const stationList = document.getElementById('stationList');
-    stationList.innerHTML = '';
-
-    const modalTitle = document.querySelector('.modal-title');
-    modalTitle.innerText = 'Manage Favorites';
-
-    if (favorites.length === 0) {
-        stationList.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">No favorites yet</p>';
-    } else {
-        favorites.forEach((fav, index) => {
-            const option = document.createElement('div');
-            option.className = 'favorite-manage-item';
-            option.innerHTML = `
-                <div class="favorite-manage-info">
-                    <strong>${fav.name}</strong>
-                    <div style="font-size: 12px; color: var(--text-tertiary);">ID: ${fav.id}</div>
-                </div>
-                <button class="remove-favorite-btn" onclick="removeFavorite(${index})">Remove</button>
-            `;
-            stationList.appendChild(option);
-        });
-    }
-
-    document.getElementById('stationSelectPopup').style.display = 'block';
 }
 
 function removeFavorite(index) {
