@@ -340,17 +340,15 @@ window.addEventListener("click", function(event) {
     }
 });
 
-// ------------------ ENTER KEY SEARCH ------------------
-
-// Trigger search when user presses Enter in stop input
-document.getElementById("stopInput").addEventListener("keypress", function(event) {
-    if (event.key === "Enter") {
-        searchStop();
-    }
-});
-
 // ------------------ INITIALIZATION ------------------
 
 window.addEventListener("DOMContentLoaded", function() {
+    // Trigger search when user presses Enter in stop input
+    document.getElementById("stopInput").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") {
+            searchStop();
+        }
+    });
+
     quickSearch("Hauptbahnhof Vorplatz");
 });
