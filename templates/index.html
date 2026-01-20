@@ -4,105 +4,122 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KVV Live Departures</title>
-
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-<div class="container">
-    <h1>KVV Live Departures</h1>
+<div class="app-container">
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <h1 class="app-title">KVV Live</h1>
+            <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">
+                <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <svg class="moon-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </button>
+        </div>
+    </header>
 
-    <!-- Search -->
-    <div class="search-bar">
-        <input type="text" id="stopInput" placeholder="Enter stop name">
-        <button onclick="searchStop()">Search</button>
-        <span id="countdown">Next update in: -- s</span>
-        <select id="stationDropdown" style="display:none;" onchange="switchStation()"></select>
-    </div>
+    <main class="main-content">
+        <!-- Search Section -->
+        <section class="search-section">
+            <div class="search-container">
+                <input
+                    type="text"
+                    id="stopInput"
+                    class="search-input"
+                    placeholder="Search station..."
+                    autocomplete="off"
+                >
+                <button class="search-btn" onclick="searchStop()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                </button>
+            </div>
 
-    <!-- Quick Stations -->
-    <div class="quick-stations">
-        <span>Quick stations:</span>
+            <!-- Quick Stations -->
+            <div class="quick-stations">
+                <button class="quick-btn" onclick="quickSearch('Hauptbahnhof Vorplatz')">Hbf (Vorplatz)</button>
+                <button class="quick-btn" onclick="quickSearch('Europaplatz')">Europaplatz</button>
+                <button class="quick-btn" onclick="quickSearch('Marktplatz')">Marktplatz</button>
+            </div>
+        </section>
 
-        <button onclick="quickSearch('Hauptbahnhof Vorplatz')">
-            Hbf (Vorplatz)
-        </button>
+        <!-- Filters Section -->
+        <section class="filters-section">
+            <div class="filter-group">
+                <input
+                    type="text"
+                    id="lineFilter"
+                    class="filter-input"
+                    placeholder="Filter by line..."
+                    oninput="applyFilter()"
+                >
+                <select id="typeFilter" class="filter-select" onchange="applyFilter()">
+                    <option value="">All vehicles</option>
+                    <option value="s">S-Bahn</option>
+                    <option value="tram">Tram</option>
+                    <option value="bus">Bus</option>
+                </select>
+            </div>
 
-        <button onclick="quickSearch('Europaplatz')">
-            Europaplatz
-        </button>
+            <!-- Station Dropdown -->
+            <select id="stationDropdown" class="station-dropdown" style="display:none;" onchange="switchStation()"></select>
+        </section>
 
-        <button onclick="quickSearch('Marktplatz')">
-            Marktplatz (Kaiserstr.) (Pl 1/2 Kaiserstr., 3/4 Pyramide')
-        </button>
-    </div>
-	
+        <!-- Station Header -->
+        <div class="station-section">
+            <h2 id="stationHeader" class="station-name"></h2>
+            <div class="countdown-badge" id="countdown">--</div>
+        </div>
 
-    <!-- Filters -->
-    <div class="filters">
-        <input
-            type="text"
-            id="lineFilter"
-            placeholder="Line (e.g. 1, 5, S1)"
-            oninput="applyFilter()"
-        >
+        <!-- Loading Indicator -->
+        <div id="loading" class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading departures...</p>
+        </div>
 
-        <select id="typeFilter" onchange="applyFilter()">
-            <option value="">All vehicles</option>
-            <option value="tram">Tram</option>
-            <option value="bus">Bus</option>
-            <option value="s">S-Bahn</option>
-        </select>
-    </div>
-
-    <!-- Station name from API -->
-    <h2 id="stationHeader" class="station-header"></h2>
-
-    <!-- Departures Table -->
-    <table id="departuresTable">
-        <thead>
-            <tr>
-                <th>Platform</th>
-                <th>Line</th>
-                <th>Destination</th>
-                <th>Live</th>
-                <th>Departure</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+        <!-- Departures Grid -->
+        <section class="departures-section">
+            <div id="departuresGrid" class="departures-grid"></div>
+        </section>
+    </main>
 </div>
 
 <!-- Popup for future departures -->
-<div id="popup" class="popup">
-    <div class="popup-content">
-        <span class="close" onclick="closePopup()">&times;</span>
-        <h2 id="popupHeader"></h2>
-
-        <table id="futureTable">
-            <thead>
-                <tr>
-                    <th>Platform</th>
-                    <th>Departure</th>
-                    <th>Live</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+<div id="popup" class="modal">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closePopup()">×</button>
+        <h2 id="popupHeader" class="modal-title"></h2>
+        <div id="futureList" class="future-list"></div>
     </div>
 </div>
 
 <!-- Popup for station selection -->
-<div id="stationSelectPopup" class="popup">
-    <div class="popup-content">
-        <span class="close" onclick="closeStationSelect()">&times;</span>
-        <h2>Select Station</h2>
-        <div id="stationList"></div>
+<div id="stationSelectPopup" class="modal">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeStationSelect()">×</button>
+        <h2 class="modal-title">Select Station</h2>
+        <div id="stationList" class="station-list"></div>
     </div>
 </div>
 
 <script src="/static/script.js"></script>
+<script src="/static/theme.js"></script>
 </body>
 </html>
-
 

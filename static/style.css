@@ -1,3 +1,581 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary: #667eea;
+    --primary-dark: #5568d3;
+    --secondary: #764ba2;
+    --success: #4CAF50;
+    --danger: #ff5252;
+    --warning: #ff9800;
+
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #f0f1f5;
+    --text-primary: #1a1a1a;
+    --text-secondary: #666666;
+    --text-tertiary: #999999;
+    --border: #e8e9f0;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+body.dark-mode {
+    --bg-primary: #1a1a2e;
+    --bg-secondary: #16213e;
+    --bg-tertiary: #0f3460;
+    --text-primary: #f5f5f5;
+    --text-secondary: #b0b0b0;
+    --text-tertiary: #808080;
+    --border: #2d3a5a;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.3s, color 0.3s;
+    overflow-x: hidden;
+}
+
+/* ==================== HEADER ==================== */
+
+.header {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+    color: white;
+    padding: 20px;
+    box-shadow: var(--shadow-lg);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-content {
+    max-width: 1000px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.app-title {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.theme-toggle {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+}
+
+.theme-toggle:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+}
+
+.theme-toggle svg {
+    width: 24px;
+    height: 24px;
+}
+
+.moon-icon {
+    display: none;
+}
+
+body.dark-mode .sun-icon {
+    display: none;
+}
+
+body.dark-mode .moon-icon {
+    display: block;
+}
+
+/* ==================== MAIN CONTENT ==================== */
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.main-content {
+    flex: 1;
+    max-width: 1000px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* ==================== SEARCH SECTION ==================== */
+
+.search-section {
+    margin-bottom: 30px;
+}
+
+.search-container {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.search-input {
+    flex: 1;
+    padding: 14px 18px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    font-size: 16px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: all 0.3s;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.search-btn {
+    padding: 14px 24px;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    transition: all 0.3s;
+    box-shadow: var(--shadow);
+}
+
+.search-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.search-btn:active {
+    transform: translateY(0);
+}
+
+.search-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.quick-stations {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.quick-btn {
+    padding: 10px 16px;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.quick-btn:hover {
+    background-color: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    transform: translateY(-1px);
+}
+
+/* ==================== FILTERS SECTION ==================== */
+
+.filters-section {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    display: flex;
+    gap: 12px;
+    flex: 1;
+    min-width: 250px;
+}
+
+.filter-input,
+.filter-select,
+.station-dropdown {
+    padding: 12px 16px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.filter-input {
+    flex: 1;
+}
+
+.filter-select,
+.station-dropdown {
+    cursor: pointer;
+}
+
+.filter-input:focus,
+.filter-select:focus,
+.station-dropdown:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* ==================== STATION SECTION ==================== */
+
+.station-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--border);
+}
+
+.station-name {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.countdown-badge {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 140px;
+    text-align: center;
+}
+
+/* ==================== LOADING ==================== */
+
+.loading-container {
+    display: none;
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--bg-tertiary);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-container p {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+/* ==================== DEPARTURES GRID ==================== */
+
+.departures-section {
+    margin-bottom: 40px;
+}
+
+.departures-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.platform-column {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow);
+}
+
+.platform-header-title {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+    color: white;
+    padding: 16px;
+    font-weight: 700;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: center;
+    border-bottom: 2px solid var(--border);
+}
+
+.departure-card {
+    background-color: var(--bg-primary);
+    border-bottom: 1px solid var(--border);
+    border-left: 4px solid;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.departure-card:last-child {
+    border-bottom: none;
+}
+
+.departure-card:hover {
+    background-color: var(--bg-secondary);
+    transform: translateX(4px);
+    box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.platform-label {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.line-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.line-icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.line-icon img {
+    width: 100%;
+    height: 100%;
+}
+
+.line-number {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    min-width: 40px;
+}
+
+.direction {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-top: 2px;
+    word-break: break-word;
+}
+
+.time-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+}
+
+.departure-time {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.realtime-badge {
+    background-color: rgba(76, 175, 80, 0.2);
+    color: var(--success);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* ==================== MODAL ==================== */
+
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.2s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background-color: var(--bg-primary);
+    margin: 60px auto;
+    padding: 30px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    border-radius: 16px;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    animation: slideUp 0.3s;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: none;
+    border: none;
+    font-size: 32px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: color 0.2s;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    color: var(--text-primary);
+}
+
+.modal-title {
+    color: var(--text-primary);
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0 0 20px 0;
+}
+
+/* ==================== FUTURE LIST ==================== */
+
+.future-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.future-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    background-color: var(--bg-secondary);
+    border-radius: 10px;
+    border-left: 3px solid var(--primary);
+}
+
+.future-time {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.future-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.future-platform {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.future-realtime {
+    font-size: 11px;
+    color: var(--success);
+    font-weight: 600;
+}
+
+/* ==================== STATION LIST ==================== */
+
+.station-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.station-option {
+    padding: 16px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    background-color: var(--bg-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.station-option:hover {
+    border-color: var(--primary);
+    background-color: var(--bg-secondary);
+    transform: translateY(-2px);
+}
+
+.station-option-name {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.station-option-id {
+    color: var(--text-tertiary);
+    font-size: 12px;
+}
+
 /* ------------------- Mobile responsiveness ------------------- */
 body {
     font-family: Arial, sans-serif;
@@ -101,7 +679,13 @@ tr:hover {
 #loading {
     display: none;
     text-align: center;
-    padding: 20px 0;
+    padding: 30px 0;
+}
+
+#loading p {
+    margin: 10px 0 0 0;
+    color: #666;
+    font-size: 14px;
 }
 
 .spinner {
@@ -138,4 +722,177 @@ tr:hover {
 #stationList {
     max-height: 400px;
     overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+    .main-content {
+        padding: 16px;
+    }
+
+    .header-content {
+        flex-direction: row;
+    }
+
+    .app-title {
+        font-size: 24px;
+    }
+
+    .search-section {
+        margin-bottom: 20px;
+    }
+
+    .quick-stations {
+        gap: 8px;
+    }
+
+    .quick-btn {
+        flex: 1;
+        min-width: 100px;
+    }
+
+    .filters-section {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .filter-group {
+        flex-direction: column;
+        min-width: 100%;
+    }
+
+    .filter-input,
+    .filter-select,
+    .station-dropdown {
+        width: 100%;
+    }
+
+    .station-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .station-name {
+        font-size: 22px;
+    }
+
+    .countdown-badge {
+        align-self: flex-start;
+    }
+
+    .departures-grid {
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 16px;
+    }
+
+    .platform-header-title {
+        padding: 12px;
+        font-size: 13px;
+    }
+
+    .departure-card {
+        padding: 12px;
+    }
+
+    .line-number {
+        font-size: 16px;
+    }
+
+    .direction {
+        font-size: 12px;
+    }
+
+    .departure-time {
+        font-size: 20px;
+    }
+
+    .modal-content {
+        margin: 40px auto;
+        width: 95%;
+        padding: 20px;
+    }
+
+    .departure-time {
+        font-size: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header {
+        padding: 16px;
+    }
+
+    .app-title {
+        font-size: 20px;
+    }
+
+    .search-container {
+        gap: 8px;
+    }
+
+    .search-btn {
+        padding: 12px 16px;
+    }
+
+    .station-name {
+        font-size: 20px;
+    }
+
+    .countdown-badge {
+        font-size: 12px;
+        padding: 6px 12px;
+    }
+
+    .departures-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .platform-header-title {
+        padding: 10px;
+        font-size: 12px;
+    }
+
+    .departure-card {
+        padding: 10px;
+    }
+
+    .line-info {
+        gap: 10px;
+    }
+
+    .line-icon {
+        width: 24px;
+        height: 24px;
+    }
+
+    .line-number {
+        font-size: 14px;
+    }
+
+    .direction {
+        font-size: 11px;
+    }
+
+    .departure-time {
+        font-size: 18px;
+    }
+
+    .realtime-badge {
+        font-size: 9px;
+        padding: 3px 8px;
+    }
+
+    .modal-content {
+        margin: 20px auto;
+        padding: 16px;
+    }
+
+    .modal-title {
+        font-size: 20px;
+    }
+
+    .modal-close {
+        font-size: 28px;
+    }
 }

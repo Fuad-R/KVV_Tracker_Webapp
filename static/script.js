@@ -1,5 +1,5 @@
 let stopName = "";
-let stopId = null; // when set, bypass name search
+let stopId = null;
 let countdown = 30;
 let countdownInterval;
 let refreshInterval;
@@ -12,6 +12,10 @@ function searchStop() {
 
     stopName = document.getElementById("stopInput").value.trim();
     if (!stopName) return;
+
+    // Reset filters when searching a new station
+    document.getElementById("lineFilter").value = "";
+    document.getElementById("typeFilter").value = "";
 
     fetchDepartures();
 
@@ -39,6 +43,10 @@ function quickSearchById(id, displayName) {
     document.getElementById("stopInput").value = displayName;
     document.getElementById("stationHeader").innerText = displayName;
 
+    // Reset filters when searching a new station
+    document.getElementById("lineFilter").value = "";
+    document.getElementById("typeFilter").value = "";
+
     fetchDeparturesById();
 
     if (refreshInterval) clearInterval(refreshInterval);
@@ -52,8 +60,9 @@ function quickSearchById(id, displayName) {
 // ------------------ COUNTDOWN ------------------
 
 function updateCountdown() {
-    document.getElementById("countdown").innerText =
-        `Next update in: ${countdown} s`;
+    const minutes = Math.floor(countdown / 60) || 0;
+    const seconds = countdown % 60;
+    document.getElementById("countdown").innerText = `${seconds}s`;
     countdown--;
     if (countdown < 0) countdown = 30;
 }
@@ -61,6 +70,8 @@ function updateCountdown() {
 // ------------------ FETCH (BY NAME) ------------------
 
 async function fetchDepartures() {
+    document.getElementById("loading").style.display = "block";
+
     try {
         const res = await fetch(`/search?stop=${stopName}`);
         const result = await res.json();
@@ -81,16 +92,20 @@ async function fetchDepartures() {
         }
 
         lastDepartures = result.departures;
-        populateTable(result.departures);
+        applyFilter();
         countdown = 30;
     } catch (e) {
         console.error(e);
+    } finally {
+        document.getElementById("loading").style.display = "none";
     }
 }
 
 // ------------------ FETCH (BY ID) ------------------
 
 async function fetchDeparturesById() {
+    document.getElementById("loading").style.display = "block";
+
     try {
         const res = await fetch(`/search_by_id?stop_id=${stopId}&station_name=${encodeURIComponent(stopName)}`);
         const result = await res.json();
@@ -104,10 +119,12 @@ async function fetchDeparturesById() {
             result.station_name;
 
         lastDepartures = result.departures;
-        populateTable(result.departures);
+        applyFilter();
         countdown = 30;
     } catch (e) {
         console.error(e);
+    } finally {
+        document.getElementById("loading").style.display = "none";
     }
 }
 
@@ -187,43 +204,76 @@ function applyFilter() {
 // ------------------ TABLE ------------------
 
 function populateTable(data) {
-    const tbody = document.querySelector("#departuresTable tbody");
-    tbody.innerHTML = "";
+    const grid = document.getElementById("departuresGrid");
+    grid.innerHTML = "";
 
+    if (data.length === 0) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-secondary);">No departures found</div>';
+        return;
+    }
+
+    // Group by platform
     const platforms = {};
     data.forEach(d => {
-        if (!platforms[d.platform]) platforms[d.platform] = [];
+        if (!platforms[d.platform]) {
+            platforms[d.platform] = [];
+        }
         platforms[d.platform].push(d);
     });
 
-    Object.keys(platforms)
-        .sort((a, b) => a.localeCompare(b))
-        .forEach(platform => {
-            const headerRow = document.createElement("tr");
-            headerRow.innerHTML =
-                `<td colspan="5" class="platform-header">Platform ${platform}</td>`;
-            tbody.appendChild(headerRow);
+    // Sort platforms numerically/alphabetically
+    const sortedPlatforms = Object.keys(platforms).sort((a, b) => {
+        const numA = parseInt(a);
+        const numB = parseInt(b);
+        if (!isNaN(numA) && !isNaN(numB)) {
+            return numA - numB;
+        }
+        return a.localeCompare(b);
+    });
 
-            platforms[platform]
-                .sort((a, b) => a.minutes_remaining - b.minutes_remaining)
-                .forEach(d => {
-                    const tr = document.createElement("tr");
-                    const iconHtml = getLineIcon(d.line);
+    // Create column for each platform
+    sortedPlatforms.forEach(platform => {
+        const platformColumn = document.createElement("div");
+        platformColumn.className = "platform-column";
 
-                    tr.innerHTML = `
-                        <td>${d.platform}</td>
-                        <td style="color:${d.color}">
-                            ${iconHtml} ${d.line}
-                        </td>
-                        <td>${d.direction}</td>
-                        <td>${d.is_realtime ? "Yes" : "No"}</td>
-                        <td>${d.departure_display}</td>
-                    `;
+        const platformHeader = document.createElement("div");
+        platformHeader.className = "platform-header-title";
+        platformHeader.innerText = `Platform ${platform}`;
+        platformColumn.appendChild(platformHeader);
 
-                    tr.onclick = () => showFuture(d.line, d.direction);
-                    tbody.appendChild(tr);
-                });
-        });
+        // Sort departures by time within platform
+        platforms[platform]
+            .sort((a, b) => a.minutes_remaining - b.minutes_remaining)
+            .forEach(d => {
+                const card = document.createElement("div");
+                card.className = "departure-card";
+                card.style.borderLeftColor = d.color;
+
+                const iconHtml = getLineIcon(d.line);
+                const realtimeBadge = d.is_realtime
+                    ? '<div class="realtime-badge">Real-time</div>'
+                    : '';
+
+                card.innerHTML = `
+                    <div class="line-info">
+                        <div class="line-icon">${iconHtml}</div>
+                        <div>
+                            <div class="line-number" style="color: ${d.color};">${d.line}</div>
+                            <div class="direction">${d.direction}</div>
+                        </div>
+                    </div>
+                    <div class="time-section">
+                        <div class="departure-time">${d.departure_display}</div>
+                        ${realtimeBadge}
+                    </div>
+                `;
+
+                card.onclick = () => showFuture(d.line, d.direction);
+                platformColumn.appendChild(card);
+            });
+
+        grid.appendChild(platformColumn);
+    });
 }
 
 // ------------------ FUTURE POPUP ------------------
@@ -235,22 +285,25 @@ async function showFuture(line, direction) {
         );
         const data = await res.json();
 
-        document.getElementById("popupHeader").innerText =
-            `Line ${line} towards ${direction}`;
+        document.getElementById("popupHeader").innerText = `Line ${line} towards ${direction}`;
 
-        const tbody = document.querySelector("#futureTable tbody");
-        tbody.innerHTML = "";
+        const futureList = document.getElementById("futureList");
+        futureList.innerHTML = "";
 
         data.forEach(d => {
-            const tr = document.createElement("tr");
-            const iconHtml = getLineIcon(d.line);
+            const item = document.createElement("div");
+            item.className = "future-item";
 
-            tr.innerHTML = `
-                <td>${d.platform}</td>
-                <td>${iconHtml} ${d.departure_display}</td>
-                <td>${d.is_realtime ? "Yes" : "No"}</td>
+            const realtimeText = d.is_realtime ? 'Real-time' : 'Scheduled';
+
+            item.innerHTML = `
+                <div>
+                    <div class="future-time">${d.departure_display}</div>
+                    <div class="future-platform">Platform ${d.platform}</div>
+                </div>
+                <div class="future-realtime">${realtimeText}</div>
             `;
-            tbody.appendChild(tr);
+            futureList.appendChild(item);
         });
 
         document.getElementById("popup").style.display = "block";
@@ -269,11 +322,16 @@ function closePopup() {
 
 window.addEventListener("click", function(event) {
     const popup = document.getElementById("popup");
-    if (
-        popup.style.display === "block" &&
-        !popup.querySelector(".popup-content").contains(event.target)
-    ) {
+    const stationPopup = document.getElementById("stationSelectPopup");
+
+    if (popup.style.display === "block" &&
+        !popup.querySelector(".modal-content").contains(event.target)) {
         popup.style.display = "none";
+    }
+
+    if (stationPopup.style.display === "block" &&
+        !stationPopup.querySelector(".modal-content").contains(event.target)) {
+        stationPopup.style.display = "none";
     }
 });
 
@@ -334,7 +392,7 @@ window.addEventListener("click", function(event) {
     const popup = document.getElementById("stationSelectPopup");
     if (
         popup.style.display === "block" &&
-        !popup.querySelector(".popup-content").contains(event.target)
+        !popup.querySelector(".modal-content").contains(event.target)
     ) {
         popup.style.display = "none";
     }
