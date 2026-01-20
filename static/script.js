@@ -5,6 +5,7 @@ let countdownInterval;
 let refreshInterval;
 let lastDepartures = [];
 const FAVORITES_KEY = 'kvv_favorites';
+const HOME_STATION_KEY = 'kvv_home_station';
 
 // ------------------ SEARCH (BY NAME) ------------------
 
@@ -104,6 +105,7 @@ async function fetchDepartures() {
         applyFilter();
         countdown = 30;
         updateFavoriteButton();
+        updateHomeButton();
     } catch (e) {
         console.error(e);
     } finally {
@@ -132,6 +134,7 @@ async function fetchDeparturesById() {
         applyFilter();
         countdown = 30;
         updateFavoriteButton();
+        updateHomeButton();
     } catch (e) {
         console.error(e);
     } finally {
@@ -602,6 +605,53 @@ function removeFavorite(index) {
     updateFavoritesDisplay();
 }
 
+// ------------------ HOME STATION ------------------
+
+function getHomeStation() {
+    const stored = localStorage.getItem(HOME_STATION_KEY);
+    return stored ? JSON.parse(stored) : null;
+}
+
+function setHomeStation() {
+    if (!stopName || stopId === null) {
+        if (!lastDepartures.length) {
+            alert('Please search for a station first');
+            return;
+        }
+    }
+
+    const cleanedName = cleanStationName(stopName);
+    const home = getHomeStation();
+
+    if (home && home.id === stopId && home.name === cleanedName) {
+        // Already home, maybe toggle off? The description says "this will then set that station as their home"
+        // Let's allow unsetting if they click it again.
+        localStorage.removeItem(HOME_STATION_KEY);
+    } else {
+        localStorage.setItem(HOME_STATION_KEY, JSON.stringify({
+            id: stopId,
+            name: cleanedName
+        }));
+    }
+
+    updateHomeButton();
+}
+
+function updateHomeButton() {
+    const btn = document.getElementById('homeBtn');
+    if (!btn) return;
+    const cleanedName = cleanStationName(stopName);
+    const home = getHomeStation();
+
+    if (home && home.id === stopId && home.name === cleanedName) {
+        btn.classList.add('home-active');
+        btn.setAttribute('title', 'Currently your home station (click to unset)');
+    } else {
+        btn.classList.remove('home-active');
+        btn.setAttribute('title', 'Set as home station');
+    }
+}
+
 // ------------------ INITIALIZATION ------------------
 
 window.addEventListener("DOMContentLoaded", function() {
@@ -613,5 +663,15 @@ window.addEventListener("DOMContentLoaded", function() {
     });
 
     updateFavoritesDisplay();
-    quickSearch("Hauptbahnhof Vorplatz");
+    
+    const home = getHomeStation();
+    if (home) {
+        if (home.id) {
+            quickSearchById(home.id, home.name);
+        } else {
+            quickSearch(home.name);
+        }
+    } else {
+        quickSearch("Hauptbahnhof Vorplatz");
+    }
 });

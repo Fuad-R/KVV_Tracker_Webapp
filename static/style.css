@@ -198,7 +198,8 @@ body.dark-mode .moon-icon {
     height: 20px;
 }
 
-.favorite-btn {
+.favorite-btn,
+.home-btn {
     padding: 14px 18px;
     background-color: var(--bg-tertiary);
     border: 2px solid var(--border);
@@ -212,19 +213,22 @@ body.dark-mode .moon-icon {
     flex-shrink: 0;
 }
 
-.favorite-btn:hover {
+.favorite-btn:hover,
+.home-btn:hover {
     border-color: var(--primary);
     color: var(--primary);
 }
 
-.favorite-btn.favorite-active {
+.favorite-btn.favorite-active,
+.home-btn.home-active {
     background-color: rgba(195, 10, 55, 0.1);
     border-color: var(--primary);
     color: var(--primary);
     fill: var(--primary);
 }
 
-.favorite-btn svg {
+.favorite-btn svg,
+.home-btn svg {
     width: 20px;
     height: 20px;
 }
@@ -1004,7 +1008,8 @@ tr:hover {
         gap: 8px;
     }
 
-    .favorite-btn {
+    .favorite-btn,
+    .home-btn {
         padding: 12px 14px;
     }
 
@@ -1127,7 +1132,8 @@ tr:hover {
         gap: 6px;
     }
 
-    .favorite-btn {
+    .favorite-btn,
+    .home-btn {
         padding: 10px 12px;
     }
 
