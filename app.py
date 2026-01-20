@@ -18,7 +18,7 @@ def get_stop_id(stop_name: str):
 
 
 def get_stop_departures(stop_id: str):
-    r = requests.get(f"{BASE_URL}/stops/{stop_id}", timeout=10)
+    r = requests.get(f"{BASE_URL}/stops/{stop_id}", params={"detailed": "1"}, timeout=10)
     r.raise_for_status()
     return r.json()
 

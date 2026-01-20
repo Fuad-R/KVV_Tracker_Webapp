@@ -297,6 +297,10 @@ function populateTable(data) {
                     ? 'Arriving now'
                     : d.departure_display;
 
+                const wheelchairEmoji = d.wheelchair_accessible === true || d.wheelchair_accessible === "true"
+                    ? ' ♿'
+                    : '';
+
                 card.innerHTML = `
                     <div class="line-info">
                         <div class="line-icon">${iconHtml}</div>
@@ -306,7 +310,7 @@ function populateTable(data) {
                         </div>
                     </div>
                     <div class="time-section">
-                        <div class="departure-time">${departureDisplay}</div>
+                        <div class="departure-time">${departureDisplay}${wheelchairEmoji}</div>
                         ${realtimeBadge}
                     </div>
                 `;
@@ -368,10 +372,13 @@ async function showFuture(line, direction) {
             item.className = "future-item";
 
             const realtimeText = d.is_realtime ? 'Real-time' : 'Scheduled';
+            const wheelchairEmoji = d.wheelchair_accessible === true || d.wheelchair_accessible === "true"
+                ? ' ♿'
+                : '';
 
             item.innerHTML = `
                 <div>
-                    <div class="future-time">${d.departure_display}</div>
+                    <div class="future-time">${d.departure_display}${wheelchairEmoji}</div>
                     <div class="future-platform">Platform ${d.platform}</div>
                 </div>
                 <div class="future-realtime">${realtimeText}</div>
