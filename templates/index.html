@@ -81,7 +81,6 @@
             <div class="favorites-section" id="favoritesSection" style="display: none;">
                 <div class="favorites-header">
                     <h3>Favorites</h3>
-                    <button class="manage-favorites-btn" onclick="showManageFavorites()" title="Manage favorites">⚙️</button>
                 </div>
                 <div class="favorites-grid" id="favoritesGrid"></div>
             </div>
@@ -103,6 +102,11 @@
                     <option value="tram">Tram</option>
                     <option value="bus">Bus</option>
                 </select>
+                <label class="wheelchair-toggle">
+                    <input type="checkbox" id="wheelchairFilter" onchange="applyFilter()">
+                    <span class="toggle-slider"></span>
+                    <span class="wheelchair-emoji">♿</span>
+                </label>
             </div>
 
             <!-- Station Dropdown -->
