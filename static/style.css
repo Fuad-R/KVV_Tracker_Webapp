@@ -1,0 +1,120 @@
+/* ------------------- Mobile responsiveness ------------------- */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0 10px;
+}
+
+.container {
+    max-width: 900px;
+    margin: auto;
+}
+
+.search-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.search-bar input,
+.search-bar button,
+.search-bar select {
+    flex: 1 1 auto;
+    min-width: 100px;
+}
+
+/* ------------------- Table ------------------- */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    padding: 6px;
+    text-align: center;
+}
+
+tr:hover {
+    background-color: #f1f1f1;
+    cursor: pointer;
+}
+
+/* ------------------- Popup ------------------- */
+.popup {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+}
+
+.popup-content {
+    background: white;
+    margin: 50px auto;
+    padding: 20px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 80%;
+    overflow-y: auto;
+    position: relative;
+    border-radius: 8px;
+}
+
+.close {
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    font-size: 28px;
+    cursor: pointer;
+}
+
+/* ------------------- Platform header styling ------------------- */
+.platform-header {
+    background-color: #f0f0f0;
+    font-weight: bold;
+    text-align: left;
+    padding-left: 10px;
+    border-top: 2px solid #ccc;
+}
+
+/* ------------------- Line icons ------------------- */
+.line-icon {
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+
+/* ------------------- Hover effect ------------------- */
+#departuresTable tbody tr:hover {
+    background-color: #e8f0ff;
+}
+
+/* ------------------- Loading animation ------------------- */
+#loading {
+    display: none;
+    text-align: center;
+    padding: 20px 0;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

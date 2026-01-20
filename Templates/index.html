@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KVV Live Departures</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="container">
+    <h1>KVV Live Departures</h1>
+
+    <!-- Search -->
+    <div class="search-bar">
+        <input type="text" id="stopInput" placeholder="Enter stop name">
+        <button onclick="searchStop()">Search</button>
+        <span id="countdown">Next update in: -- s</span>
+    </div>
+
+    <!-- Quick Stations -->
+    <div class="quick-stations">
+        <span>Quick stations:</span>
+
+        <button onclick="quickSearch('Hauptbahnhof Vorplatz')">
+            Hbf (Vorplatz)
+        </button>
+
+        <button onclick="quickSearch('Europaplatz')">
+            Europaplatz
+        </button>
+
+        <!-- SPECIAL CASE: direct station ID  DEPRICATED--> 
+		<!--
+        <button onclick="quickSearchById('7001011', 'Karlsruhe, Marktplatz (Pyramide)')">
+            Marktplatz (Pyramide)
+        </button>
+		--!>
+        <button onclick="quickSearch('Marktplatz')">
+            Marktplatz (Kaiserstr.) (Pl 1/2 Kaiserstr., 3/4 Pyramide')
+        </button>
+    </div>
+	
+
+    <!-- Filters -->
+    <div class="filters">
+        <input
+            type="text"
+            id="lineFilter"
+            placeholder="Line (e.g. 1, 5, S1)"
+            oninput="applyFilter()"
+        >
+
+        <select id="typeFilter" onchange="applyFilter()">
+            <option value="">All vehicles</option>
+            <option value="tram">Tram</option>
+            <option value="bus">Bus</option>
+            <option value="s">S-Bahn</option>
+        </select>
+    </div>
+
+    <!-- Station name from API -->
+    <h2 id="stationHeader" class="station-header"></h2>
+
+    <!-- Departures Table -->
+    <table id="departuresTable">
+        <thead>
+            <tr>
+                <th>Platform</th>
+                <th>Line</th>
+                <th>Destination</th>
+                <th>Live</th>
+                <th>Departure</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<!-- Popup -->
+<div id="popup" class="popup">
+    <div class="popup-content">
+        <span class="close" onclick="closePopup()">&times;</span>
+        <h2 id="popupHeader"></h2>
+
+        <table id="futureTable">
+            <thead>
+                <tr>
+                    <th>Platform</th>
+                    <th>Departure</th>
+                    <th>Live</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<script src="/static/script.js"></script>
+</body>
+</html>
