@@ -2,9 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>KVV Live Departures</title>
+    <link rel="icon" href="/static/icons/missing.png" type="image/png">
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#c30a37">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="KVV Live">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-icon" href="/static/icons/missing.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/static/icons/missing.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/missing.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="/static/icons/missing.png">
 </head>
 <body>
 
@@ -12,7 +23,10 @@
     <!-- Header -->
     <header class="header">
         <div class="header-content">
-            <h1 class="app-title">KVV Live</h1>
+            <h1 class="app-title">
+                <img src="/static/icons/missing.png" alt="KVV Logo" class="header-logo">
+                Live
+            </h1>
             <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">
                 <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="5"></circle>
@@ -134,6 +148,15 @@
 
 <script src="/static/script.js"></script>
 <script src="/static/theme.js"></script>
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+                .then(reg => console.log('Service Worker registered', reg))
+                .catch(err => console.log('Service Worker registration failed', err));
+        });
+    }
+</script>
 </body>
 </html>
 

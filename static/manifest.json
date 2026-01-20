@@ -1,0 +1,26 @@
+{
+  "name": "KVV Live Departures",
+  "short_name": "KVV Live",
+  "description": "Live departure board for KVV (Karlsruher Verkehrsverbund)",
+  "start_url": "/?pwa=true",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#c30a37",
+  "icons": [
+    {
+      "src": "/static/icons/missing.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icons/missing.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

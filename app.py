@@ -45,6 +45,16 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/sw.js")
+def serve_sw():
+    return app.send_static_file("sw.js"), {"Content-Type": "application/javascript"}
+
+
+@app.route("/manifest.json")
+def serve_manifest():
+    return app.send_static_file("manifest.json")
+
+
 @app.route("/search")
 def search():
     stop_name = request.args.get("stop")
