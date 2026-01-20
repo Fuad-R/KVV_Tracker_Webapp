@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KVV Tracker</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style-modern.css">
+</head>
+<body>
+    <div class="ui-toggle">
+        <label for="uiModeToggle" class="toggle-label">Modern UI</label>
+        <input type="checkbox" id="uiModeToggle" class="toggle-checkbox">
+        <span class="toggle-slider"></span>
+    </div>
+
+    <div class="container classic-mode" id="classicMode">
+        <h1>KVV Tracker</h1>
+        <div class="search-bar">
+            <input type="text" id="stopInput" placeholder="Enter stop name...">
+            <button onclick="searchStop()">Search</button>
+            <select id="typeFilter" onchange="applyFilter()">
+                <option value="">All Types</option>
+                <option value="s">S-Bahn</option>
+                <option value="tram">Trams</option>
+                <option value="bus">Buses</option>
+            </select>
+            <input type="text" id="lineFilter" placeholder="Filter by line..." onchange="applyFilter()">
+            <select id="stationDropdown" style="display:none;" onchange="switchStation()"></select>
+        </div>
+
+        <div id="stationHeader" style="font-size: 24px; font-weight: bold; margin-bottom: 10px;"></div>
+        <div id="countdown" style="font-size: 14px; color: #666;"></div>
+
+        <div id="loading">
+            <div class="spinner"></div>
+        </div>
+
+        <table id="departuresTable">
+            <thead>
+                <tr>
+                    <th>Platform</th>
+                    <th>Line</th>
+                    <th>Direction</th>
+                    <th>Real-time</th>
+                    <th>Departure</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <div id="popup" class="popup">
+            <div class="popup-content">
+                <span class="close" onclick="closePopup()">&times;</span>
+                <h2 id="popupHeader"></h2>
+                <table id="futureTable">
+                    <thead>
+                        <tr>
+                            <th>Platform</th>
+                            <th>Departure</th>
+                            <th>Real-time</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="stationSelectPopup" class="popup">
+            <div class="popup-content">
+                <span class="close" onclick="closeStationSelect()">&times;</span>
+                <h2>Select Station</h2>
+                <div id="stationList"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container modern-mode" id="modernMode" style="display: none;">
+        <div class="modern-header">
+            <h1 class="modern-title">KVV Tracker</h1>
+        </div>
+
+        <div class="modern-search-section">
+            <input type="text" id="stopInputModern" placeholder="Search station..." class="modern-input">
+            <button onclick="searchStop()" class="modern-button">Search</button>
+        </div>
+
+        <div class="modern-filters">
+            <select id="typeFilterModern" onchange="applyFilter()" class="modern-filter-select">
+                <option value="">All Types</option>
+                <option value="s">S-Bahn</option>
+                <option value="tram">Trams</option>
+                <option value="bus">Buses</option>
+            </select>
+            <input type="text" id="lineFilterModern" placeholder="Filter by line..." class="modern-filter-select" onchange="applyFilter()">
+            <select id="stationDropdownModern" style="display:none;" onchange="switchStation()" class="modern-filter-select"></select>
+        </div>
+
+        <div class="modern-station-info">
+            <h2 id="stationHeaderModern" class="modern-station-name"></h2>
+            <div id="countdownModern" class="modern-countdown"></div>
+        </div>
+
+        <div id="loadingModern" class="modern-loading">
+            <div class="modern-spinner"></div>
+        </div>
+
+        <div id="departuresModern" class="modern-departures-container"></div>
+
+        <div id="popupModern" class="modern-popup">
+            <div class="modern-popup-content">
+                <span class="modern-close" onclick="closePopup()">&times;</span>
+                <h2 id="popupHeaderModern" class="modern-popup-title"></h2>
+                <div id="futureTableModern" class="modern-future-list"></div>
+            </div>
+        </div>
+
+        <div id="stationSelectPopupModern" class="modern-popup">
+            <div class="modern-popup-content">
+                <span class="modern-close" onclick="closeStationSelect()">&times;</span>
+                <h2>Select Station</h2>
+                <div id="stationListModern" class="modern-station-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+    <script src="/static/script-modern.js"></script>
+</body>
+</html>
