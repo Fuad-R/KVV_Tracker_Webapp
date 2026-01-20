@@ -9,19 +9,21 @@ app = Flask(__name__)
 
 # ---------------- API ----------------
 
+
 def get_stop_id(stop_name: str):
     r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name}, timeout=10)
     r.raise_for_status()
     data = r.json()
     return data[0]["id"] if data else None
 
+
 def get_stop_departures(stop_id: str):
     r = requests.get(f"{BASE_URL}/stops/{stop_id}", timeout=10)
     r.raise_for_status()
     return r.json()
 
-# ---------------- LINE COLORS ----------------
 
+# ---------------- LINE COLORS ----------------
 def line_color(line: str) -> str:
     l = line.lower()
     if l.startswith("s"):
@@ -36,8 +38,8 @@ def line_color(line: str) -> str:
     }
     return tram_colors.get(line, "purple")
 
-# ---------------- ROUTES ----------------
 
+# ---------------- ROUTES ----------------
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -85,6 +87,7 @@ def search():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 @app.route("/search_by_id")
 def search_by_id():
     stop_id = request.args.get("stop_id")
@@ -111,6 +114,7 @@ def search_by_id():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/future_departures")
 def future_departures():
@@ -144,6 +148,7 @@ def future_departures():
         return jsonify(future)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
