@@ -236,9 +236,38 @@ function populateTable(data) {
         const platformColumn = document.createElement("div");
         platformColumn.className = "platform-column";
 
+        // Get unique service types for this platform
+        const serviceTypes = new Set();
+        platforms[platform].forEach(d => {
+            const type = getServiceType(d.line);
+            serviceTypes.add(type);
+        });
+
+        // Create platform header with icons
         const platformHeader = document.createElement("div");
         platformHeader.className = "platform-header-title";
-        platformHeader.innerText = `Platform ${platform}`;
+
+        const platformTitleDiv = document.createElement("div");
+        platformTitleDiv.className = "platform-title-with-icons";
+
+        const titleSpan = document.createElement("span");
+        titleSpan.innerText = `Platform ${platform}`;
+        platformTitleDiv.appendChild(titleSpan);
+
+        const iconsDiv = document.createElement("div");
+        iconsDiv.className = "platform-service-icons";
+
+        // Add icons for each service type
+        Array.from(serviceTypes).forEach(type => {
+            const iconImg = document.createElement("img");
+            iconImg.src = `/static/icons/${type}.png`;
+            iconImg.className = "platform-service-icon";
+            iconImg.title = type.charAt(0).toUpperCase() + type.slice(1);
+            iconsDiv.appendChild(iconImg);
+        });
+
+        platformTitleDiv.appendChild(iconsDiv);
+        platformHeader.appendChild(platformTitleDiv);
         platformColumn.appendChild(platformHeader);
 
         // Sort departures by time within platform
@@ -254,6 +283,11 @@ function populateTable(data) {
                     ? '<div class="realtime-badge">Real-time</div>'
                     : '';
 
+                // Display "Arriving now" for 0-1 minutes
+                const departureDisplay = d.minutes_remaining <= 1
+                    ? 'Arriving now'
+                    : d.departure_display;
+
                 card.innerHTML = `
                     <div class="line-info">
                         <div class="line-icon">${iconHtml}</div>
@@ -263,7 +297,7 @@ function populateTable(data) {
                         </div>
                     </div>
                     <div class="time-section">
-                        <div class="departure-time">${d.departure_display}</div>
+                        <div class="departure-time">${departureDisplay}</div>
                         ${realtimeBadge}
                     </div>
                 `;
@@ -274,6 +308,36 @@ function populateTable(data) {
 
         grid.appendChild(platformColumn);
     });
+}
+
+// Helper function to determine service type
+function getServiceType(line) {
+    const lineLower = line.toLowerCase();
+    const lineNumber = parseInt(line);
+
+    if (lineLower.startsWith("s")) {
+        return "sbahn";
+    } else if (lineLower.startsWith("u")) {
+        return "ubahn";
+    } else if (!isNaN(lineNumber) && lineNumber >= 1 && lineNumber <= 9) {
+        return "tram";
+    } else if (lineLower.startsWith("n")) {
+        return "nl";
+    } else if (
+        lineLower.startsWith("ic") ||
+        lineLower.startsWith("re") ||
+        lineLower.startsWith("rb") ||
+        lineLower.startsWith("mex") ||
+        lineLower.startsWith("ice") ||
+        lineLower.startsWith("ir") ||
+        lineLower.startsWith("ec") ||
+        lineLower.startsWith("en")
+    ) {
+        return "db";
+    } else if (!isNaN(lineNumber) && lineNumber >= 10) {
+        return "bus";
+    }
+    return "bus";
 }
 
 // ------------------ FUTURE POPUP ------------------
