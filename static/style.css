@@ -388,6 +388,35 @@ body.dark-mode .wheelchair-emoji {
     vertical-align: middle;
 }
 
+/* ==================== DEBUG SECTION ==================== */
+
+.debug-form {
+    display: flex;
+    flex-direction: column;
+}
+
+.debug-form label {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--text-secondary);
+}
+
+.debug-edit-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-tertiary);
+    margin-left: 8px;
+    padding: 0 4px;
+    transition: color 0.2s;
+}
+
+.debug-edit-btn:hover {
+    color: var(--primary);
+}
+
 /* ==================== STATION SECTION ==================== */
 
 .station-section {
@@ -559,6 +588,8 @@ body.dark-mode .wheelchair-emoji {
 }
 
 .line-number {
+    display: flex;
+    align-items: center;
     font-size: 18px;
     font-weight: 700;
     color: var(--text-primary);
@@ -595,6 +626,38 @@ body.dark-mode .wheelchair-emoji {
     font-weight: 600;
     text-transform: uppercase;
     white-space: nowrap;
+}
+
+.departure-time-container {
+    display: flex;
+    flex-direction: column;
+}
+
+.scheduled-time-strikethrough {
+    text-decoration: line-through;
+    color: var(--text-tertiary);
+    font-size: 18px;
+    margin-right: 8px;
+}
+
+.estimated-time-delayed {
+    color: #f44336; /* Red color for delayed time */
+}
+
+.delay-minutes-label {
+    font-size: 14px;
+    color: #f44336;
+    margin-left: 4px;
+    font-weight: 600;
+}
+
+.delay-info {
+    color: #f44336 !important;
+}
+
+.unit {
+    font-size: 0.6em;
+    vertical-align: super;
 }
 
 /* ==================== MODAL ==================== */

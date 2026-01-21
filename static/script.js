@@ -1,11 +1,148 @@
 let stopName = "";
 let stopId = null;
+let debugMode = false;
+let debugPassword = localStorage.getItem("debugPassword") || "";
 let countdown = 30;
 let countdownInterval;
 let refreshInterval;
+let updatesPaused = false;
 let lastDepartures = [];
 const FAVORITES_KEY = 'kvv_favorites';
 const HOME_STATION_KEY = 'kvv_home_station';
+
+// ------------------ SEARCH (BY NAME) ------------------
+
+// ------------------ DEBUG FUNCTIONS ------------------
+
+function closeDebugLogin() {
+    document.getElementById("debugLoginPopup").style.display = "none";
+    document.getElementById("debugLoginError").style.display = "none";
+}
+
+async function loginDebug() {
+    const password = document.getElementById("debugPassword").value;
+    try {
+        const res = await fetch("/debug/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+    if (data.success) {
+        debugMode = true;
+        debugPassword = password;
+        localStorage.setItem("debugPassword", password);
+        closeDebugLogin();
+        const pauseBtn = document.getElementById("pauseUpdatesBtn");
+        if (pauseBtn) pauseBtn.style.display = "block";
+        const leaveBtn = document.getElementById("leaveDebugBtn");
+        if (leaveBtn) leaveBtn.style.display = "block";
+        applyFilter(); // Re-render to show edit buttons
+    } else {
+            document.getElementById("debugLoginError").textContent = data.error;
+            document.getElementById("debugLoginError").style.display = "block";
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function logoutDebug() {
+    debugMode = false;
+    debugPassword = "";
+    localStorage.removeItem("debugPassword");
+    
+    // Hide debug buttons
+    const pauseBtn = document.getElementById("pauseUpdatesBtn");
+    if (pauseBtn) pauseBtn.style.display = "none";
+    const leaveBtn = document.getElementById("leaveDebugBtn");
+    if (leaveBtn) leaveBtn.style.display = "none";
+    
+    // If updates were paused, resume them
+    if (updatesPaused) {
+        togglePauseUpdates();
+    }
+    
+    // Re-render departures to remove edit buttons
+    applyFilter();
+}
+
+function openDebugEdit(stop_id, line, direction, stable_scheduled_time, minutes, delay) {
+    document.getElementById("editStopId").value = stop_id;
+    document.getElementById("editLine").value = line;
+    document.getElementById("editDirection").value = direction;
+    document.getElementById("editStableScheduledTime").value = stable_scheduled_time;
+    document.getElementById("editMinutes").value = minutes;
+    document.getElementById("editDelay").value = delay || 0;
+    document.getElementById("debugEditPopup").style.display = "block";
+}
+
+function closeDebugEdit() {
+    document.getElementById("debugEditPopup").style.display = "none";
+}
+
+async function saveDebugOverride() {
+    const stop_id = document.getElementById("editStopId").value;
+    const line = document.getElementById("editLine").value;
+    const direction = document.getElementById("editDirection").value;
+    const stable_scheduled_time = document.getElementById("editStableScheduledTime").value;
+    const minutes = document.getElementById("editMinutes").value;
+    const delay = document.getElementById("editDelay").value;
+
+    try {
+        const res = await fetch("/debug/update", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Debug-Password": debugPassword
+            },
+            body: JSON.stringify({
+                stop_id,
+                line,
+                direction,
+                stable_scheduled_time,
+                minutes_remaining: minutes,
+                delay: delay
+            })
+        });
+        const result = await res.json();
+        console.log("Debug update response:", result);
+        closeDebugEdit();
+        refreshDepartures(); // Refresh data to see changes
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function clearDebugOverride() {
+    const stop_id = document.getElementById("editStopId").value;
+    const line = document.getElementById("editLine").value;
+    const direction = document.getElementById("editDirection").value;
+    const stable_scheduled_time = document.getElementById("editStableScheduledTime").value;
+
+    try {
+        const res = await fetch("/debug/update", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Debug-Password": debugPassword
+            },
+            body: JSON.stringify({
+                stop_id,
+                line,
+                direction,
+                stable_scheduled_time
+                // No overrides provided means clear
+            })
+        });
+        const data = await res.json();
+        console.log("Debug clear response:", data);
+        closeDebugEdit();
+        refreshDepartures();
+    } catch (e) {
+        console.error(e);
+    }
+}
 
 // ------------------ SEARCH (BY NAME) ------------------
 
@@ -14,6 +151,12 @@ function searchStop() {
 
     stopName = document.getElementById("stopInput").value.trim();
     if (!stopName) return;
+
+    if (stopName === "test-dev-debug") {
+        document.getElementById("debugLoginPopup").style.display = "block";
+        document.getElementById("stopInput").value = "";
+        return;
+    }
 
     // Reset filters when searching a new station
     document.getElementById("lineFilter").value = "";
@@ -63,7 +206,19 @@ function quickSearchById(id, displayName) {
 
 // ------------------ COUNTDOWN ------------------
 
+function refreshDepartures() {
+    if (stopId) {
+        fetchDeparturesById(true);
+    } else if (stopName) {
+        fetchDepartures(true);
+    }
+}
+
 function updateCountdown() {
+    if (updatesPaused) {
+        document.getElementById("countdown").innerText = "Paused";
+        return;
+    }
     const minutes = Math.floor(countdown / 60) || 0;
     const seconds = countdown % 60;
     document.getElementById("countdown").innerText = `${seconds}s`;
@@ -71,9 +226,23 @@ function updateCountdown() {
     if (countdown < 0) countdown = 30;
 }
 
+function togglePauseUpdates() {
+    updatesPaused = !updatesPaused;
+    const btn = document.getElementById("pauseUpdatesBtn");
+    if (btn) {
+        btn.innerText = updatesPaused ? "Resume Updates" : "Pause Updates";
+    }
+    if (!updatesPaused) {
+        countdown = 30;
+        refreshDepartures();
+    }
+    updateCountdown();
+}
+
 // ------------------ FETCH (BY NAME) ------------------
 
-async function fetchDepartures() {
+async function fetchDepartures(ignorePaused = false) {
+    if (updatesPaused && !ignorePaused) return;
     document.getElementById("loading").style.display = "block";
 
     try {
@@ -115,7 +284,8 @@ async function fetchDepartures() {
 
 // ------------------ FETCH (BY ID) ------------------
 
-async function fetchDeparturesById() {
+async function fetchDeparturesById(ignorePaused = false) {
+    if (updatesPaused && !ignorePaused) return;
     document.getElementById("loading").style.display = "block";
 
     try {
@@ -297,7 +467,7 @@ function populateTable(data) {
             .forEach(d => {
                 const card = document.createElement("div");
                 card.className = "departure-card";
-                card.style.borderLeftColor = d.color;
+                card.style.borderLeftColor = d.status_color || d.color;
 
                 const iconHtml = getLineIcon(d.line);
                 const realtimeBadge = d.is_realtime
@@ -309,20 +479,44 @@ function populateTable(data) {
                     ? 'Arriving now'
                     : d.departure_display;
 
+                let timeHtml = `<div class="departure-time">${departureDisplay}</div>`;
+                if (d.delay > 1) {
+                    const scheduledDisplay = d.minutes_remaining - d.delay <= 1 
+                        ? 'Arriving now' 
+                        : d.scheduled_display;
+                    timeHtml = `
+                        <div class="departure-time">
+                            <span class="scheduled-time-strikethrough">${scheduledDisplay}</span>
+                            <span class="estimated-time-delayed">${departureDisplay}</span>
+                        </div>
+                    `;
+                }
+
+                const delayInfo = d.delay > 0 
+                    ? `<div class="delay-info" style="color: red; font-size: 12px; font-weight: 600;">+${d.delay}<span class="unit">min</span> delay</div>`
+                    : '';
+
                 const wheelchairIcon = d.wheelchair_accessible === true || d.wheelchair_accessible === "true"
                     ? '<span class="departure-wheelchair-icon">♿</span>'
+                    : '';
+
+                const debugEditBtn = debugMode
+                    ? `<button class="debug-edit-btn" onclick="event.stopPropagation(); openDebugEdit('${d.stop_id}', '${d.line}', '${d.direction}', '${d.stable_scheduled_time}', ${d.minutes_remaining}, ${d.delay || 0})">✎</button>`
                     : '';
 
                 card.innerHTML = `
                     <div class="line-info">
                         <div class="line-icon">${iconHtml}</div>
-                        <div>
-                            <div class="line-number" style="color: ${d.color};">${d.line}</div>
+                        <div style="flex-grow: 1;">
+                            <div class="line-number" style="color: ${d.color};">${d.line}${wheelchairIcon}${debugEditBtn}</div>
                             <div class="direction">${d.direction}</div>
                         </div>
                     </div>
                     <div class="time-section">
-                        <div class="departure-time">${departureDisplay}${wheelchairIcon}</div>
+                        <div class="departure-time-container">
+                            ${timeHtml}
+                            ${delayInfo}
+                        </div>
                         ${realtimeBadge}
                     </div>
                 `;
@@ -374,7 +568,11 @@ async function showFuture(line, direction) {
         );
         const data = await res.json();
 
-        document.getElementById("popupHeader").innerText = `Line ${line} towards ${direction}`;
+        // Check accessibility from first departure (all on same line/direction should be similar)
+        const isAccessible = data.length > 0 && (data[0].wheelchair_accessible === true || data[0].wheelchair_accessible === "true");
+        const wheelchairIcon = isAccessible ? '<span class="future-wheelchair-icon">♿</span>' : '';
+
+        document.getElementById("popupHeader").innerHTML = `Line ${line} towards ${direction}${wheelchairIcon}`;
 
         const futureList = document.getElementById("futureList");
         futureList.innerHTML = "";
@@ -384,16 +582,40 @@ async function showFuture(line, direction) {
             item.className = "future-item";
 
             const realtimeText = d.is_realtime ? 'Real-time' : 'Scheduled';
-            const wheelchairIcon = d.wheelchair_accessible === true || d.wheelchair_accessible === "true"
-                ? '<span class="future-wheelchair-icon">♿</span>'
+
+            // Display "Arriving now" for 0-1 minutes
+            const departureDisplay = d.minutes_remaining <= 1
+                ? 'Arriving now'
+                : d.departure_display;
+
+            let timeHtml = `<div class="future-time">${departureDisplay}</div>`;
+            if (d.delay > 1) {
+                const scheduledDisplay = d.minutes_remaining - d.delay <= 1 
+                    ? 'Arriving now' 
+                    : d.scheduled_display;
+                timeHtml = `
+                    <div class="future-time">
+                        <span class="scheduled-time-strikethrough" style="font-size: 14px;">${scheduledDisplay}</span>
+                        <span class="estimated-time-delayed" style="font-size: 18px;">${departureDisplay}</span>
+                    </div>
+                `;
+            }
+
+            const debugEditBtn = debugMode
+                ? `<button class="debug-edit-btn" onclick="event.stopPropagation(); openDebugEdit('${d.stop_id}', '${d.line}', '${d.direction}', '${d.stable_scheduled_time}', ${d.minutes_remaining}, ${d.delay || 0})">✎</button>`
                 : '';
 
             item.innerHTML = `
-                <div>
-                    <div class="future-time">${d.departure_display}${wheelchairIcon}</div>
-                    <div class="future-platform">Platform ${d.platform}</div>
+                <div style="border-left: 4px solid ${d.status_color || '#2e7d32'}; padding-left: 12px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <div style="flex-grow: 1;">
+                        ${timeHtml}
+                        <div class="future-platform">Platform ${d.platform}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="future-realtime">${realtimeText}</div>
+                        ${debugEditBtn}
+                    </div>
                 </div>
-                <div class="future-realtime">${realtimeText}</div>
             `;
             futureList.appendChild(item);
         });
@@ -419,6 +641,18 @@ window.addEventListener("click", function(event) {
     if (popup.style.display === "block" &&
         !popup.querySelector(".modal-content").contains(event.target)) {
         popup.style.display = "none";
+    }
+
+    const debugLoginPopup = document.getElementById("debugLoginPopup");
+    if (debugLoginPopup.style.display === "block" &&
+        !debugLoginPopup.querySelector(".modal-content").contains(event.target)) {
+        debugLoginPopup.style.display = "none";
+    }
+
+    const debugEditPopup = document.getElementById("debugEditPopup");
+    if (debugEditPopup.style.display === "block" &&
+        !debugEditPopup.querySelector(".modal-content").contains(event.target)) {
+        debugEditPopup.style.display = "none";
     }
 
     if (stationPopup.style.display === "block" &&
@@ -664,6 +898,15 @@ window.addEventListener("DOMContentLoaded", function() {
 
     updateFavoritesDisplay();
     
+    // Auto-login if password is saved
+    if (debugPassword) {
+        debugMode = true;
+        const pauseBtn = document.getElementById("pauseUpdatesBtn");
+        if (pauseBtn) pauseBtn.style.display = "block";
+        const leaveBtn = document.getElementById("leaveDebugBtn");
+        if (leaveBtn) leaveBtn.style.display = "block";
+    }
+
     const home = getHomeStation();
     if (home) {
         if (home.id) {
