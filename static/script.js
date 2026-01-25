@@ -177,6 +177,7 @@ function searchStop() {
 
 function quickSearch(station) {
     document.getElementById("stopInput").value = station;
+    toggleClearButton();
     searchStop();
 }
 
@@ -187,6 +188,7 @@ function quickSearchById(id, displayName) {
     stopName = displayName;
 
     document.getElementById("stopInput").value = displayName;
+    toggleClearButton();
     document.getElementById("stationHeader").innerText = displayName;
 
     // Reset filters when searching a new station
@@ -259,6 +261,8 @@ async function fetchDepartures(ignorePaused = false) {
 
         // Store the full station name and ID from API
         stopName = fullStationName;
+        document.getElementById("stopInput").value = fullStationName;
+        toggleClearButton();
         if (result.departures.length > 0) {
             stopId = result.departures[0].stop_id;
         }
@@ -723,6 +727,23 @@ window.addEventListener("click", function(event) {
         popup.style.display = "none";
     }
 });
+
+function toggleClearButton() {
+    const input = document.getElementById("stopInput");
+    const clearBtn = document.getElementById("clearInputBtn");
+    if (input && clearBtn) {
+        clearBtn.style.display = input.value.length > 0 ? "flex" : "none";
+    }
+}
+
+function clearSearchInput() {
+    const input = document.getElementById("stopInput");
+    if (input) {
+        input.value = "";
+        input.focus();
+        toggleClearButton();
+    }
+}
 
 // ------------------ FAVORITES ------------------
 
