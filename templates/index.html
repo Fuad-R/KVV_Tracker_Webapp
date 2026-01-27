@@ -16,6 +16,9 @@
     <link rel="apple-touch-icon" sizes="152x152" href="/static/icons/missing.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/missing.png">
     <link rel="apple-touch-icon" sizes="167x167" href="/static/icons/missing.png">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 </head>
 <body>
 
@@ -27,6 +30,10 @@
                 <img src="/static/icons/missing.png" alt="KVV Logo" class="header-logo" id="headerLogo">
                 Live
             </h1>
+            <div class="header-tabs">
+                <button class="tab-btn active" onclick="switchTab('departures')">Departures</button>
+                <button class="tab-btn" id="mapTabBtn" onclick="switchTab('map')" style="display: none;">Map</button>
+            </div>
             <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">
                 <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="5"></circle>
@@ -47,102 +54,123 @@
     </header>
 
     <main class="main-content">
-        <!-- Search Section -->
-        <section class="search-section">
-            <div class="search-container">
-                <div class="search-input-wrapper">
+        <!-- Departures Tab -->
+        <div id="departuresTab" class="tab-content active">
+            <!-- Search Section -->
+            <section class="search-section">
+                <div class="search-container">
+                    <div class="search-input-wrapper">
+                        <input
+                            type="text"
+                            id="stopInput"
+                            class="search-input"
+                            placeholder="Search station..."
+                            autocomplete="off"
+                            oninput="toggleClearButton()"
+                        >
+                        <button id="clearInputBtn" class="clear-btn" onclick="clearSearchInput()" title="Clear search">×</button>
+                    </div>
+                    <button class="search-btn" onclick="searchStop()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                    </button>
+                    <button class="favorite-btn" id="favoriteBtn" onclick="toggleFavorite()" title="Add to favorites">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                        </svg>
+                    </button>
+                    <button class="home-btn" id="homeBtn" onclick="setHomeStation()" title="Set as home station">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Quick Stations -->
+                <div class="quick-stations">
+                    <button class="quick-btn" onclick="quickSearch('Hauptbahnhof Vorplatz')">Hbf (Vorplatz)</button>
+                    <button class="quick-btn" onclick="quickSearch('Europaplatz')">Europaplatz</button>
+                    <button class="quick-btn" onclick="quickSearch('Marktplatz')">Marktplatz</button>
+                </div>
+
+                <!-- Favorites Section -->
+                <div class="favorites-section" id="favoritesSection" style="display: none;">
+                    <div class="favorites-header">
+                        <h3>Favorites</h3>
+                    </div>
+                    <div class="favorites-grid" id="favoritesGrid"></div>
+                </div>
+            </section>
+
+            <!-- Filters Section -->
+            <section class="filters-section">
+                <div class="filter-group">
                     <input
                         type="text"
-                        id="stopInput"
-                        class="search-input"
-                        placeholder="Search station..."
-                        autocomplete="off"
-                        oninput="toggleClearButton()"
+                        id="lineFilter"
+                        class="filter-input"
+                        placeholder="Filter by line..."
+                        oninput="applyFilter()"
                     >
-                    <button id="clearInputBtn" class="clear-btn" onclick="clearSearchInput()" title="Clear search">×</button>
+                    <select id="typeFilter" class="filter-select" onchange="applyFilter()">
+                        <option value="">All vehicles</option>
+                        <option value="s">S-Bahn</option>
+                        <option value="tram">Tram</option>
+                        <option value="bus">Bus</option>
+                    </select>
+                    <label class="wheelchair-toggle">
+                        <input type="checkbox" id="wheelchairFilter" onchange="applyFilter()">
+                        <span class="toggle-slider"></span>
+                        <span class="wheelchair-emoji">♿</span>
+                    </label>
                 </div>
-                <button class="search-btn" onclick="searchStop()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <path d="m21 21-4.35-4.35"></path>
-                    </svg>
-                </button>
-                <button class="favorite-btn" id="favoriteBtn" onclick="toggleFavorite()" title="Add to favorites">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                    </svg>
-                </button>
-                <button class="home-btn" id="homeBtn" onclick="setHomeStation()" title="Set as home station">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                    </svg>
-                </button>
-            </div>
 
-            <!-- Quick Stations -->
-            <div class="quick-stations">
-                <button class="quick-btn" onclick="quickSearch('Hauptbahnhof Vorplatz')">Hbf (Vorplatz)</button>
-                <button class="quick-btn" onclick="quickSearch('Europaplatz')">Europaplatz</button>
-                <button class="quick-btn" onclick="quickSearch('Marktplatz')">Marktplatz</button>
-            </div>
+                <!-- Station Dropdown -->
+                <select id="stationDropdown" class="station-dropdown" style="display:none;" onchange="switchStation()"></select>
+            </section>
 
-            <!-- Favorites Section -->
-            <div class="favorites-section" id="favoritesSection" style="display: none;">
-                <div class="favorites-header">
-                    <h3>Favorites</h3>
+            <!-- Station Header -->
+            <div class="station-section">
+                <h2 id="stationHeader" class="station-name"></h2>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button id="updateNowBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px; background: #2e7d32;" onclick="updateNow()">Update Now</button>
+                    <button id="pauseUpdatesBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px;" onclick="togglePauseUpdates()">Pause Updates</button>
+                    <button id="leaveDebugBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px; background: #666;" onclick="logoutDebug()">Leave Dev Mode</button>
+                    <div class="countdown-badge" id="countdown">--</div>
                 </div>
-                <div class="favorites-grid" id="favoritesGrid"></div>
-            </div>
-        </section>
-
-        <!-- Filters Section -->
-        <section class="filters-section">
-            <div class="filter-group">
-                <input
-                    type="text"
-                    id="lineFilter"
-                    class="filter-input"
-                    placeholder="Filter by line..."
-                    oninput="applyFilter()"
-                >
-                <select id="typeFilter" class="filter-select" onchange="applyFilter()">
-                    <option value="">All vehicles</option>
-                    <option value="s">S-Bahn</option>
-                    <option value="tram">Tram</option>
-                    <option value="bus">Bus</option>
-                </select>
-                <label class="wheelchair-toggle">
-                    <input type="checkbox" id="wheelchairFilter" onchange="applyFilter()">
-                    <span class="toggle-slider"></span>
-                    <span class="wheelchair-emoji">♿</span>
-                </label>
             </div>
 
-            <!-- Station Dropdown -->
-            <select id="stationDropdown" class="station-dropdown" style="display:none;" onchange="switchStation()"></select>
-        </section>
-
-        <!-- Station Header -->
-        <div class="station-section">
-            <h2 id="stationHeader" class="station-name"></h2>
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <button id="pauseUpdatesBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px;" onclick="togglePauseUpdates()">Pause Updates</button>
-                <button id="leaveDebugBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px; background: #666;" onclick="logoutDebug()">Leave Dev Mode</button>
-                <div class="countdown-badge" id="countdown">--</div>
+            <!-- Loading Indicator -->
+            <div id="loading" class="loading-container">
+                <div class="spinner"></div>
+                <p>Loading departures...</p>
             </div>
+
+            <!-- Error Message Box -->
+            <div id="errorBox" class="error-box" style="display: none;">
+                <button class="error-close" onclick="closeError()">×</button>
+                <p id="errorMessage"></p>
+            </div>
+
+            <!-- Departures Grid -->
+            <section class="departures-section">
+                <div id="departuresGrid" class="departures-grid"></div>
+            </section>
         </div>
 
-        <!-- Loading Indicator -->
-        <div id="loading" class="loading-container">
-            <div class="spinner"></div>
-            <p>Loading departures...</p>
+        <!-- Map Tab -->
+        <div id="mapTab" class="tab-content">
+            <div style="position: relative;">
+                <div id="map" style="height: calc(100vh - 180px); width: 100%; border-radius: 12px; box-shadow: var(--shadow);"></div>
+                <div id="mapLoading" class="map-loading-indicator">
+                    <div class="spinner"></div>
+                    <span>Loading stations...</span>
+                </div>
+            </div>
         </div>
-
-        <!-- Departures Grid -->
-        <section class="departures-section">
-            <div id="departuresGrid" class="departures-grid"></div>
-        </section>
     </main>
 </div>
 
@@ -202,6 +230,8 @@
     </div>
 </div>
 
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="/static/script.js"></script>
 <script src="/static/theme.js"></script>
 <script>

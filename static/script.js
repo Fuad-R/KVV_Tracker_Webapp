@@ -7,6 +7,10 @@ let countdownInterval;
 let refreshInterval;
 let updatesPaused = false;
 let lastDepartures = [];
+let map = null;
+let markersLayer = null;
+let userMarker = null;
+let searchTimeout = null;
 const FAVORITES_KEY = 'kvv_favorites';
 const HOME_STATION_KEY = 'kvv_home_station';
 
@@ -33,10 +37,14 @@ async function loginDebug() {
         debugPassword = password;
         localStorage.setItem("debugPassword", password);
         closeDebugLogin();
+        const updateBtn = document.getElementById("updateNowBtn");
+        if (updateBtn) updateBtn.style.display = "block";
         const pauseBtn = document.getElementById("pauseUpdatesBtn");
         if (pauseBtn) pauseBtn.style.display = "block";
         const leaveBtn = document.getElementById("leaveDebugBtn");
         if (leaveBtn) leaveBtn.style.display = "block";
+        const mapBtn = document.getElementById("mapTabBtn");
+        if (mapBtn) mapBtn.style.display = "block";
         applyFilter(); // Re-render to show edit buttons
     } else {
             document.getElementById("debugLoginError").textContent = data.error;
@@ -53,14 +61,23 @@ function logoutDebug() {
     localStorage.removeItem("debugPassword");
     
     // Hide debug buttons
+    const updateBtn = document.getElementById("updateNowBtn");
+    if (updateBtn) updateBtn.style.display = "none";
     const pauseBtn = document.getElementById("pauseUpdatesBtn");
     if (pauseBtn) pauseBtn.style.display = "none";
     const leaveBtn = document.getElementById("leaveDebugBtn");
     if (leaveBtn) leaveBtn.style.display = "none";
+    const mapBtn = document.getElementById("mapTabBtn");
+    if (mapBtn) mapBtn.style.display = "none";
     
     // If updates were paused, resume them
     if (updatesPaused) {
         togglePauseUpdates();
+    }
+
+    // Switch to departures tab if currently on map tab
+    if (document.getElementById("mapTab").classList.contains("active")) {
+        switchTab('departures');
     }
     
     // Re-render departures to remove edit buttons
@@ -149,28 +166,34 @@ async function clearDebugOverride() {
 function searchStop() {
     stopId = null; // reset ID-based search
 
-    stopName = document.getElementById("stopInput").value.trim();
-    if (!stopName) return;
+    let inputName = document.getElementById("stopInput").value.trim();
+    if (!inputName) return;
 
-    if (stopName === "test-dev-debug") {
+    if (inputName === "test-dev-debug") {
         document.getElementById("debugLoginPopup").style.display = "block";
         document.getElementById("stopInput").value = "";
         return;
     }
+
+    // Strip secondary info after '/' for lookup
+    if (inputName.includes('/')) {
+        inputName = inputName.split('/')[0].trim();
+    }
+    stopName = inputName;
 
     // Reset filters when searching a new station
     document.getElementById("lineFilter").value = "";
     document.getElementById("typeFilter").value = "";
     document.getElementById("wheelchairFilter").checked = false;
 
-    fetchDepartures();
+    fetchDepartures(false, true);
 
     if (refreshInterval) clearInterval(refreshInterval);
     if (countdownInterval) clearInterval(countdownInterval);
 
     countdown = 30;
     countdownInterval = setInterval(updateCountdown, 1000);
-    refreshInterval = setInterval(fetchDepartures, 30000);
+    refreshInterval = setInterval(() => refreshDepartures(false), 30000);
 }
 
 // ------------------ QUICK SEARCH (BY NAME) ------------------
@@ -196,23 +219,23 @@ function quickSearchById(id, displayName) {
     document.getElementById("typeFilter").value = "";
     document.getElementById("wheelchairFilter").checked = false;
 
-    fetchDeparturesById();
+    fetchDeparturesById(false, true);
 
     if (refreshInterval) clearInterval(refreshInterval);
     if (countdownInterval) clearInterval(countdownInterval);
 
     countdown = 30;
     countdownInterval = setInterval(updateCountdown, 1000);
-    refreshInterval = setInterval(fetchDeparturesById, 30000);
+    refreshInterval = setInterval(() => refreshDepartures(false), 30000);
 }
 
 // ------------------ COUNTDOWN ------------------
 
-function refreshDepartures() {
+function refreshDepartures(ignorePaused = true) {
     if (stopId) {
-        fetchDeparturesById(true);
+        fetchDeparturesById(ignorePaused);
     } else if (stopName) {
-        fetchDepartures(true);
+        fetchDepartures(ignorePaused);
     }
 }
 
@@ -241,14 +264,39 @@ function togglePauseUpdates() {
     updateCountdown();
 }
 
+function updateNow() {
+    countdown = 30;
+    refreshDepartures(true);
+}
+
 // ------------------ FETCH (BY NAME) ------------------
 
-async function fetchDepartures(ignorePaused = false) {
+async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
     if (updatesPaused && !ignorePaused) return;
     document.getElementById("loading").style.display = "block";
+    closeError();
+    
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+        searchTimeout = null;
+    }
+
+    if (isUserSearch) {
+        searchTimeout = setTimeout(() => {
+            showError("Station not found, try again.");
+        }, 10000);
+        // Clear the grid so we don't see old departures if a search fails
+        document.getElementById("departuresGrid").innerHTML = "";
+    }
 
     try {
-        const res = await fetch(`/search?stop=${stopName}`);
+        // Use a refined name for the search lookup
+        let lookupName = stopName;
+        if (lookupName.includes('/')) {
+            lookupName = lookupName.split('/')[0].trim();
+        }
+
+        const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`);
         const result = await res.json();
 
         if (result.error) {
@@ -256,8 +304,12 @@ async function fetchDepartures(ignorePaused = false) {
             return;
         }
 
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+            searchTimeout = null;
+        }
+
         const fullStationName = result.station_name;
-        document.getElementById("stationHeader").innerText = fullStationName;
 
         // Store the full station name and ID from API
         stopName = fullStationName;
@@ -288,9 +340,23 @@ async function fetchDepartures(ignorePaused = false) {
 
 // ------------------ FETCH (BY ID) ------------------
 
-async function fetchDeparturesById(ignorePaused = false) {
+async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     if (updatesPaused && !ignorePaused) return;
     document.getElementById("loading").style.display = "block";
+    closeError();
+
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+        searchTimeout = null;
+    }
+
+    if (isUserSearch) {
+        searchTimeout = setTimeout(() => {
+            showError("Station not found, try again.");
+        }, 10000);
+        // Clear the grid so we don't see old departures if a search fails
+        document.getElementById("departuresGrid").innerHTML = "";
+    }
 
     try {
         const res = await fetch(`/search_by_id?stop_id=${stopId}&station_name=${encodeURIComponent(stopName)}`);
@@ -299,6 +365,11 @@ async function fetchDeparturesById(ignorePaused = false) {
         if (result.error) {
             console.error(result.error);
             return;
+        }
+
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+            searchTimeout = null;
         }
 
         document.getElementById("stationHeader").innerText =
@@ -567,8 +638,13 @@ function getServiceType(line) {
 
 async function showFuture(line, direction) {
     try {
+        let lookupName = stopName;
+        if (lookupName.includes('/')) {
+            lookupName = lookupName.split('/')[0].trim();
+        }
+
         const res = await fetch(
-            `/future_departures?stop=${stopName}&line=${line}&direction=${direction}`
+            `/future_departures?stop=${encodeURIComponent(lookupName)}&line=${line}&direction=${direction}`
         );
         const data = await res.json();
 
@@ -634,6 +710,22 @@ async function showFuture(line, direction) {
 
 function closePopup() {
     document.getElementById("popup").style.display = "none";
+}
+
+function showError(message) {
+    const errorBox = document.getElementById("errorBox");
+    const errorMessage = document.getElementById("errorMessage");
+    if (errorBox && errorMessage) {
+        errorMessage.innerText = message;
+        errorBox.style.display = "block";
+    }
+}
+
+function closeError() {
+    const errorBox = document.getElementById("errorBox");
+    if (errorBox) {
+        errorBox.style.display = "none";
+    }
 }
 
 // ------------------ CLICK OUTSIDE POPUP ------------------
@@ -762,7 +854,13 @@ function isFavorite(id, name) {
 
 // Helper function to clean station name (display city info after comma)
 function cleanStationName(fullName) {
-    const parts = fullName.split(',');
+    // First, handle the primary name stripping (before '/')
+    let primaryName = fullName;
+    if (primaryName.includes('/')) {
+        primaryName = primaryName.split('/')[0].trim();
+    }
+
+    const parts = primaryName.split(',');
     if (parts.length > 1) {
         return parts[1].trim();
     }
@@ -771,9 +869,8 @@ function cleanStationName(fullName) {
 
 function toggleFavorite() {
     if (!stopName || stopId === null) {
-        // If no station loaded yet, show message
+        // If no station loaded yet, do nothing (error suppressed per requirement)
         if (!lastDepartures.length) {
-            alert('Please search for a station first');
             return;
         }
     }
@@ -870,7 +967,6 @@ function getHomeStation() {
 function setHomeStation() {
     if (!stopName || stopId === null) {
         if (!lastDepartures.length) {
-            alert('Please search for a station first');
             return;
         }
     }
@@ -909,6 +1005,252 @@ function updateHomeButton() {
 
 // ------------------ INITIALIZATION ------------------
 
+function switchTab(tabId) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.innerText.toLowerCase() === tabId);
+    });
+
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === tabId + 'Tab');
+    });
+
+    if (tabId === 'map') {
+        initMap();
+    }
+}
+
+function initMap() {
+    if (map) {
+        setTimeout(() => map.invalidateSize(), 100);
+        return;
+    }
+
+    // Centered on Karlsruhe: 49.0069, 8.4037
+    map = L.map('map').setView([49.0069, 8.4037], 13);
+
+    // Standard OSM base layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // ÖPNV Karte (Transit Layer)
+    // This layer highlights tram tracks and bus lines
+    L.tileLayer('https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: 'Map <a href="https://memomaps.de/">memomaps.de</a> <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    markersLayer = L.layerGroup().addTo(map);
+
+    // Add Locate Me button
+    const locateControl = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd: function() {
+            const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+            const button = L.DomUtil.create('button', 'locate-btn', container);
+            button.title = "Locate Me";
+            button.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+            `;
+            button.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                locateUser();
+            };
+            return container;
+        }
+    });
+    map.addControl(new locateControl());
+
+    map.on('moveend', () => {
+        if (map.getZoom() >= 15) {
+            updateOverpassMarkers();
+        } else {
+            markersLayer.clearLayers();
+        }
+    });
+
+    if (map.getZoom() >= 15) {
+        updateOverpassMarkers();
+    }
+}
+
+// Helper function to normalize station names for grouping
+function normalizeStationName(name) {
+    if (!name) return "Unknown Stop";
+    // Remove content in parentheses, e.g., "Europaplatz (U)" -> "Europaplatz"
+    // Also remove secondary info after '/', e.g., "Knielinger Allee/Städtisches Klinikum" -> "Knielinger Allee"
+    let normalized = name.replace(/\s*\(.*?\)\s*/g, '').trim();
+    if (normalized.includes('/')) {
+        normalized = normalized.split('/')[0].trim();
+    }
+    return normalized;
+}
+
+async function updateOverpassMarkers() {
+    const loadingIndicator = document.getElementById('mapLoading');
+    if (loadingIndicator) loadingIndicator.style.display = 'flex';
+
+    const bounds = map.getBounds();
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+
+    // Overpass query for public transport stops
+    const query = `
+        [out:json][timeout:25];
+        (
+          node["public_transport"~"stop_position|platform"](${sw.lat},${sw.lng},${ne.lat},${ne.lng});
+          node["highway"="bus_stop"](${sw.lat},${sw.lng},${ne.lat},${ne.lng});
+          node["railway"~"tram_stop|halt|station"](${sw.lat},${sw.lng},${ne.lat},${ne.lng});
+        );
+        out body;
+    `;
+
+    try {
+        const response = await fetch('https://overpass-api.de/api/interpreter', {
+            method: 'POST',
+            body: query
+        });
+        const data = await response.json();
+        
+        markersLayer.clearLayers();
+
+        const stopsByName = {};
+
+        data.elements.forEach(element => {
+            const rawName = element.tags.name;
+            
+            // Skip elements without a name or with "Unknown" names
+            if (!rawName || rawName.toLowerCase().includes("unknown") || rawName.toLowerCase().includes("unbekannt")) {
+                return;
+            }
+
+            const normalizedName = normalizeStationName(rawName);
+            
+            if (!stopsByName[normalizedName]) {
+                stopsByName[normalizedName] = {
+                    count: 0,
+                    latSum: 0,
+                    lonSum: 0,
+                    isDB: false
+                };
+            }
+            stopsByName[normalizedName].count++;
+            stopsByName[normalizedName].latSum += element.lat;
+            stopsByName[normalizedName].lonSum += element.lon;
+
+            // Check for DB services at this node (Regional and Long-distance trains)
+            // Explicitly exclude S-Bahn, U-Bahn, trams, and buses
+            const tags = element.tags || {};
+            const isTrain = tags.train === 'yes' || 
+                           tags.railway === 'station' ||
+                           tags.railway === 'halt';
+            
+            const isLongDistanceOrRegional = tags.ice === 'yes' || 
+                                           tags.ic === 'yes' || 
+                                           tags.re === 'yes' || 
+                                           tags.rb === 'yes' ||
+                                           tags.mex === 'yes';
+
+            const isExcluded = tags.s_bahn === 'yes' ||
+                             tags.subway === 'yes' ||
+                             tags.tram === 'yes' ||
+                             tags.bus === 'yes';
+            
+            if ((isTrain || isLongDistanceOrRegional) && !isExcluded) {
+                stopsByName[normalizedName].isDB = true;
+            }
+        });
+
+        for (const name in stopsByName) {
+            const info = stopsByName[name];
+            const avgLat = info.latSum / info.count;
+            const avgLon = info.lonSum / info.count;
+            
+            const iconSrc = info.isDB ? '/static/icons/db.png' : '/static/icons/busstop.png';
+            
+            // Custom station icon
+            const stationIcon = L.icon({
+                iconUrl: iconSrc,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+                popupAnchor: [0, -12]
+            });
+
+            const marker = L.marker([avgLat, avgLon], { icon: stationIcon });
+            
+            const popupContent = document.createElement('div');
+            popupContent.innerHTML = `
+                <div style="font-family: sans-serif; min-width: 150px;">
+                    <strong style="display: block; margin-bottom: 8px;">${name}</strong>
+                    <button class="search-btn" style="padding: 6px 12px; font-size: 12px; width: 100%;" 
+                            onclick="selectStationFromMap('${name.replace(/'/g, "\\'")}')">
+                        View Departures
+                    </button>
+                </div>
+            `;
+            
+            marker.bindPopup(popupContent);
+            markersLayer.addLayer(marker);
+        }
+    } catch (error) {
+        console.error('Error fetching Overpass data:', error);
+    } finally {
+        if (loadingIndicator) loadingIndicator.style.display = 'none';
+    }
+}
+
+function selectStationFromMap(name) {
+    switchTab('departures');
+    document.getElementById('stopInput').value = name;
+    searchStop();
+}
+
+function locateUser() {
+    if (!navigator.geolocation) {
+        alert("Geolocation is not supported by your browser.");
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const { latitude, longitude, accuracy } = position.coords;
+            const latlng = [latitude, longitude];
+
+            if (userMarker) {
+                map.removeLayer(userMarker);
+            }
+
+            // Custom icon for user location
+            const userIcon = L.divIcon({
+                className: 'user-location-marker',
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            });
+
+            userMarker = L.layerGroup([
+                L.marker(latlng, { icon: userIcon }),
+                L.circle(latlng, { radius: accuracy, weight: 1, fillOpacity: 0.1, color: '#2196F3' })
+            ]).addTo(map);
+
+            map.setView(latlng, 16);
+        },
+        (error) => {
+            console.error("Error getting location:", error);
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+        }
+    );
+}
+
 window.addEventListener("DOMContentLoaded", function() {
     // Trigger search when user presses Enter in stop input
     document.getElementById("stopInput").addEventListener("keypress", function(event) {
@@ -922,10 +1264,14 @@ window.addEventListener("DOMContentLoaded", function() {
     // Auto-login if password is saved
     if (debugPassword) {
         debugMode = true;
+        const updateBtn = document.getElementById("updateNowBtn");
+        if (updateBtn) updateBtn.style.display = "block";
         const pauseBtn = document.getElementById("pauseUpdatesBtn");
         if (pauseBtn) pauseBtn.style.display = "block";
         const leaveBtn = document.getElementById("leaveDebugBtn");
         if (leaveBtn) leaveBtn.style.display = "block";
+        const mapBtn = document.getElementById("mapTabBtn");
+        if (mapBtn) mapBtn.style.display = "block";
     }
 
     const home = getHomeStation();
