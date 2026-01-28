@@ -541,12 +541,6 @@ body.dark-mode .wheelchair-emoji {
     vertical-align: middle;
 }
 
-.future-wheelchair-icon {
-    font-size: 12px;
-    margin-left: 4px;
-    vertical-align: middle;
-}
-
 /* ==================== DEBUG SECTION ==================== */
 
 .debug-form {
@@ -928,48 +922,6 @@ body.dark-mode .wheelchair-emoji {
     font-size: 24px;
     font-weight: 700;
     margin: 0 0 20px 0;
-}
-
-/* ==================== FUTURE LIST ==================== */
-
-.future-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.future-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px;
-    background-color: var(--bg-secondary);
-    border-radius: 10px;
-    border-left: 3px solid var(--primary);
-}
-
-.future-time {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-.future-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
-}
-
-.future-platform {
-    font-size: 13px;
-    color: var(--text-secondary);
-}
-
-.future-realtime {
-    font-size: 11px;
-    color: var(--success);
-    font-weight: 600;
 }
 
 /* ==================== STATION LIST ==================== */

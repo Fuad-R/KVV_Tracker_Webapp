@@ -601,7 +601,6 @@ function populateTable(data) {
                     </div>
                 `;
 
-                card.onclick = () => showFuture(d.line, d.direction);
                 platformColumn.appendChild(card);
             });
 
@@ -639,83 +638,6 @@ function getServiceType(line) {
     return "bus";
 }
 
-// ------------------ FUTURE POPUP ------------------
-
-async function showFuture(line, direction) {
-    try {
-        let lookupName = stopName;
-        if (lookupName.includes('/')) {
-            lookupName = lookupName.split('/')[0].trim();
-        }
-
-        const res = await fetch(
-            `/future_departures?stop=${encodeURIComponent(lookupName)}&line=${line}&direction=${direction}`
-        );
-        const data = await res.json();
-
-        // Check accessibility from first departure (all on same line/direction should be similar)
-        const isAccessible = data.length > 0 && (data[0].wheelchair_accessible === true || data[0].wheelchair_accessible === "true");
-        const wheelchairIcon = isAccessible ? '<span class="future-wheelchair-icon">♿</span>' : '';
-
-        document.getElementById("popupHeader").innerHTML = `Line ${line} towards ${direction}${wheelchairIcon}`;
-
-        const futureList = document.getElementById("futureList");
-        futureList.innerHTML = "";
-
-        data.forEach(d => {
-            const item = document.createElement("div");
-            item.className = "future-item";
-
-            const realtimeText = d.is_realtime ? 'Real-time' : 'Scheduled';
-
-            // Display "Arriving now" for 0-1 minutes
-            const departureDisplay = d.minutes_remaining <= 1
-                ? 'Arriving now'
-                : d.departure_display;
-
-            let timeHtml = `<div class="future-time">${departureDisplay}</div>`;
-            if (d.delay > 1) {
-                const scheduledDisplay = d.minutes_remaining - d.delay <= 1 
-                    ? 'Arriving now' 
-                    : d.scheduled_display;
-                timeHtml = `
-                    <div class="future-time">
-                        <span class="scheduled-time-strikethrough" style="font-size: 14px;">${scheduledDisplay}</span>
-                        <span class="estimated-time-delayed" style="font-size: 18px;">${departureDisplay}</span>
-                    </div>
-                `;
-            }
-
-            const debugEditBtn = debugMode
-                ? `<button class="debug-edit-btn" onclick="event.stopPropagation(); openDebugEdit('${d.stop_id}', '${d.line}', '${d.direction}', '${d.stable_scheduled_time}', ${d.minutes_remaining}, ${d.delay || 0})">✎</button>`
-                : '';
-
-            item.innerHTML = `
-                <div style="border-left: 4px solid ${d.status_color || '#2e7d32'}; padding-left: 12px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                    <div style="flex-grow: 1;">
-                        ${timeHtml}
-                        <div class="future-platform">Platform ${d.platform}</div>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <div class="future-realtime">${realtimeText}</div>
-                        ${debugEditBtn}
-                    </div>
-                </div>
-            `;
-            futureList.appendChild(item);
-        });
-
-        document.getElementById("popup").style.display = "block";
-    } catch (e) {
-        console.error(e);
-    }
-}
-
-// ------------------ CLOSE POPUP ------------------
-
-function closePopup() {
-    document.getElementById("popup").style.display = "none";
-}
 
 function showError(message) {
     const errorBox = document.getElementById("errorBox");
@@ -736,13 +658,7 @@ function closeError() {
 // ------------------ CLICK OUTSIDE POPUP ------------------
 
 window.addEventListener("click", function(event) {
-    const popup = document.getElementById("popup");
     const stationPopup = document.getElementById("stationSelectPopup");
-
-    if (popup.style.display === "block" &&
-        !popup.querySelector(".modal-content").contains(event.target)) {
-        popup.style.display = "none";
-    }
 
     const debugLoginPopup = document.getElementById("debugLoginPopup");
     if (debugLoginPopup.style.display === "block" &&
