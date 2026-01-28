@@ -583,15 +583,15 @@ function populateTable(data) {
                     ? '<div class="realtime-badge">Real-time</div>'
                     : '';
 
-                // Display "Arriving now" for 0-1 minutes
+                // Display "Arriving Now" for 0-1 minutes
                 const departureDisplay = d.minutes_remaining <= 1
-                    ? 'Arriving now'
+                    ? 'Arriving Now'
                     : d.departure_display;
 
                 let timeHtml = `<div class="departure-time">${departureDisplay}</div>`;
                 if (d.delay > 1) {
                     const scheduledDisplay = d.minutes_remaining - d.delay <= 1 
-                        ? 'Arriving now' 
+                        ? 'Arriving Now' 
                         : d.scheduled_display;
                     timeHtml = `
                         <div class="departure-time">
@@ -602,7 +602,7 @@ function populateTable(data) {
                 }
 
                 const delayInfo = d.delay > 0 
-                    ? `<div class="delay-info" style="color: red; font-size: 12px; font-weight: 600;">+${d.delay}<span class="unit">min</span> delay</div>`
+                    ? `<div class="delay-info" style="color: red; font-size: 12px; font-weight: 600;">+${d.delay}<span class="unit">min</span> Delay</div>`
                     : '';
 
                 const wheelchairIcon = d.wheelchair_accessible === true || d.wheelchair_accessible === "true"

@@ -396,6 +396,7 @@ body.dark-mode .moon-icon {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
+    margin-top: 12px;
 }
 
 .quick-btn {
@@ -646,6 +647,7 @@ body.dark-mode .wheelchair-emoji {
     font-weight: 700;
     color: var(--text-primary);
     margin: 0;
+    word-break: break-word;
 }
 
 .countdown-badge {
@@ -655,7 +657,7 @@ body.dark-mode .wheelchair-emoji {
     border-radius: 20px;
     font-size: 13px;
     font-weight: 600;
-    min-width: 140px;
+    min-width: 120px;
     text-align: center;
 }
 
@@ -999,6 +1001,7 @@ body.dark-mode .wheelchair-emoji {
     background-color: var(--bg-primary);
     cursor: pointer;
     transition: all 0.2s;
+    word-break: break-word;
 }
 
 .station-option:hover {
@@ -1316,12 +1319,18 @@ tr:hover {
         gap: 12px;
     }
 
+    .station-section > div {
+        width: 100%;
+        justify-content: space-between;
+    }
+
     .station-name {
         font-size: 22px;
     }
 
     .countdown-badge {
         align-self: flex-start;
+        min-width: 120px;
     }
 
     .departures-grid {
@@ -1420,6 +1429,7 @@ tr:hover {
     .countdown-badge {
         font-size: 12px;
         padding: 6px 12px;
+        min-width: 100px;
     }
 
     .departures-grid {
