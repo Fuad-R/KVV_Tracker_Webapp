@@ -95,6 +95,7 @@ function toggleExperimentalFeatures() {
 function updateExperimentalUI() {
     const isEnabled = localStorage.getItem(EXPERIMENTAL_KEY) === "true";
     const mapBtn = document.getElementById("mapTabBtn");
+    const locateMeBtn = document.getElementById("locateMeBtn");
     const toggle = document.getElementById("experimentalToggle");
     
     if (toggle) toggle.checked = isEnabled;
@@ -110,6 +111,10 @@ function updateExperimentalUI() {
                 switchTab('departures');
             }
         }
+    }
+
+    if (locateMeBtn) {
+        locateMeBtn.style.display = (debugMode || isEnabled) ? "flex" : "none";
     }
 }
 
@@ -1198,6 +1203,76 @@ function locateUser() {
             timeout: 5000,
             maximumAge: 0
         }
+    );
+}
+
+async function locateNearestStation() {
+    if (!navigator.geolocation) {
+        showError("Geolocation is not supported by your browser.");
+        return;
+    }
+
+    const btn = document.getElementById("locateMeBtn");
+    btn.classList.add("active");
+
+    navigator.geolocation.getCurrentPosition(
+        async (position) => {
+            const { latitude, longitude } = position.coords;
+            try {
+                // We use Overpass to find nearby public transport stops
+                const query = `
+                    [out:json][timeout:10];
+                    (
+                      node["public_transport"="stop_position"](around:1000, ${latitude}, ${longitude});
+                      node["railway"="stop"](around:1000, ${latitude}, ${longitude});
+                      node["railway"="station"](around:1000, ${latitude}, ${longitude});
+                      node["highway"="bus_stop"](around:1000, ${latitude}, ${longitude});
+                    );
+                    out body;
+                `;
+                const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (!data.elements || data.elements.length === 0) {
+                    showError("No stations found nearby.");
+                    btn.classList.remove("active");
+                    return;
+                }
+
+                // Find the nearest one
+                let nearest = null;
+                let minSubDist = Infinity;
+
+                data.elements.forEach(el => {
+                    const dist = Math.sqrt(Math.pow(el.lat - latitude, 2) + Math.pow(el.lon - longitude, 2));
+                    // Check for el.tags.name instead of el.name because Overpass data has tags
+                    if (dist < minSubDist && el.tags && el.tags.name) {
+                        minSubDist = dist;
+                        nearest = el;
+                    }
+                });
+
+                if (nearest && nearest.tags.name) {
+                    document.getElementById("stopInput").value = nearest.tags.name;
+                    toggleClearButton();
+                    searchStop();
+                } else {
+                    showError("Could not identify the nearest station name.");
+                }
+            } catch (error) {
+                console.error("Error finding nearest station:", error);
+                showError("Error finding nearest station.");
+            } finally {
+                btn.classList.remove("active");
+            }
+        },
+        (error) => {
+            console.error("Geolocation error:", error);
+            showError("Could not get your location.");
+            btn.classList.remove("active");
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
     );
 }
 
