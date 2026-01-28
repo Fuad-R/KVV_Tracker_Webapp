@@ -126,6 +126,13 @@
                         <span class="toggle-slider"></span>
                         <span class="wheelchair-emoji">♿</span>
                     </label>
+                    <div class="experimental-toggle-container">
+                        <label class="experimental-toggle">
+                            <input type="checkbox" id="experimentalToggle" onchange="toggleExperimentalFeatures()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="experimental-label">enable experimental features</span>
+                    </div>
                 </div>
 
                 <!-- Station Dropdown -->
@@ -174,14 +181,6 @@
     </main>
 </div>
 
-<!-- Popup for future departures -->
-<div id="popup" class="modal">
-    <div class="modal-content">
-        <button class="modal-close" onclick="closePopup()">×</button>
-        <h2 id="popupHeader" class="modal-title"></h2>
-        <div id="futureList" class="future-list"></div>
-    </div>
-</div>
 
 <!-- Popup for station selection -->
 <div id="stationSelectPopup" class="modal">

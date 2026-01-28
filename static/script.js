@@ -13,6 +13,7 @@ let userMarker = null;
 let searchTimeout = null;
 const FAVORITES_KEY = 'kvv_favorites';
 const HOME_STATION_KEY = 'kvv_home_station';
+const EXPERIMENTAL_KEY = 'kvv_experimental_enabled';
 
 // ------------------ SEARCH (BY NAME) ------------------
 
@@ -43,8 +44,7 @@ async function loginDebug() {
         if (pauseBtn) pauseBtn.style.display = "block";
         const leaveBtn = document.getElementById("leaveDebugBtn");
         if (leaveBtn) leaveBtn.style.display = "block";
-        const mapBtn = document.getElementById("mapTabBtn");
-        if (mapBtn) mapBtn.style.display = "block";
+        updateExperimentalUI();
         applyFilter(); // Re-render to show edit buttons
     } else {
             document.getElementById("debugLoginError").textContent = data.error;
@@ -67,8 +67,8 @@ function logoutDebug() {
     if (pauseBtn) pauseBtn.style.display = "none";
     const leaveBtn = document.getElementById("leaveDebugBtn");
     if (leaveBtn) leaveBtn.style.display = "none";
-    const mapBtn = document.getElementById("mapTabBtn");
-    if (mapBtn) mapBtn.style.display = "none";
+    
+    updateExperimentalUI();
     
     // If updates were paused, resume them
     if (updatesPaused) {
@@ -82,6 +82,35 @@ function logoutDebug() {
     
     // Re-render departures to remove edit buttons
     applyFilter();
+}
+
+// ------------------ EXPERIMENTAL FEATURES ------------------
+
+function toggleExperimentalFeatures() {
+    const isEnabled = document.getElementById("experimentalToggle").checked;
+    localStorage.setItem(EXPERIMENTAL_KEY, isEnabled);
+    updateExperimentalUI();
+}
+
+function updateExperimentalUI() {
+    const isEnabled = localStorage.getItem(EXPERIMENTAL_KEY) === "true";
+    const mapBtn = document.getElementById("mapTabBtn");
+    const toggle = document.getElementById("experimentalToggle");
+    
+    if (toggle) toggle.checked = isEnabled;
+    
+    if (mapBtn) {
+        // If debugMode is on, it's always shown. Otherwise, depend on experimental toggle.
+        if (debugMode || isEnabled) {
+            mapBtn.style.display = "block";
+        } else {
+            mapBtn.style.display = "none";
+            // If we are currently on the map tab and experimental is disabled (and not in debug), switch away
+            if (document.getElementById("mapTab").classList.contains("active") && !debugMode) {
+                switchTab('departures');
+            }
+        }
+    }
 }
 
 function openDebugEdit(stop_id, line, direction, stable_scheduled_time, minutes, delay) {
@@ -1181,6 +1210,7 @@ window.addEventListener("DOMContentLoaded", function() {
     });
 
     updateFavoritesDisplay();
+    updateExperimentalUI();
     
     // Auto-login if password is saved
     if (debugPassword) {
@@ -1191,8 +1221,7 @@ window.addEventListener("DOMContentLoaded", function() {
         if (pauseBtn) pauseBtn.style.display = "block";
         const leaveBtn = document.getElementById("leaveDebugBtn");
         if (leaveBtn) leaveBtn.style.display = "block";
-        const mapBtn = document.getElementById("mapTabBtn");
-        if (mapBtn) mapBtn.style.display = "block";
+        updateExperimentalUI();
     }
 
     const home = getHomeStation();
