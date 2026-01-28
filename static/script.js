@@ -186,6 +186,8 @@ function searchStop() {
     document.getElementById("typeFilter").value = "";
     document.getElementById("wheelchairFilter").checked = false;
 
+    document.getElementById("stationHeader").innerText = inputName;
+
     fetchDepartures(false, true);
 
     if (refreshInterval) clearInterval(refreshInterval);
@@ -314,6 +316,8 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         // Store the full station name and ID from API
         stopName = fullStationName;
         document.getElementById("stopInput").value = fullStationName;
+        document.getElementById("stationHeader").innerText = fullStationName;
+        document.title = `${fullStationName} - KVV Live Departures`;
         toggleClearButton();
         if (result.departures.length > 0) {
             stopId = result.departures[0].stop_id;
@@ -374,6 +378,7 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
 
         document.getElementById("stationHeader").innerText =
             result.station_name;
+        document.title = `${result.station_name} - KVV Live Departures`;
 
         lastDepartures = result.departures;
         applyFilter();
