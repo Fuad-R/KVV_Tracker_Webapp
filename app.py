@@ -66,12 +66,29 @@ def search():
         return jsonify({"error": "Stop name required"}), 400
 
     stop_name_input = stop_name.strip()
-    stop_name_api = stop_name_input.replace(" ", "_")
+    
+    current_query = stop_name_input
+    stops = []
+    modified = False
+    
     try:
-        # Pull all matching stops from the API
-        r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name_api}, timeout=10)
-        r.raise_for_status()
-        stops = r.json()
+        while len(current_query) >= 3:
+            stop_name_api = current_query.replace(" ", "_")
+            # Pull all matching stops from the API
+            r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name_api}, timeout=10)
+            r.raise_for_status()
+            stops = r.json()
+            
+            if stops:
+                break
+            
+            # If not found, remove last character
+            # If original length > 5, we can try removing up to 2 characters if needed, 
+            # but the requirement says "untill the api returns a station id", 
+            # and "removing the last one or two letters ... depending on its length"
+            # I will remove 1 at a time to be safe and thorough.
+            current_query = current_query[:-1]
+            modified = True
 
         if not stops:
             return jsonify({"error": "Stop not found"}), 404
@@ -139,11 +156,15 @@ def search():
                     d["scheduled_display"] = dt_sched.strftime("%H:%M")
 
         # Return all stops and first station's departures
-        return jsonify({
+        response_data = {
             "station_name": station_name_actual,
             "departures": data,
             "all_stations": stops if len(stops) > 1 else None
-        })
+        }
+        if modified:
+            response_data["info"] = "Error searching for exact match, displaying closest match"
+        
+        return jsonify(response_data)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

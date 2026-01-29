@@ -46,9 +46,18 @@ async function loginDebug() {
         if (leaveBtn) leaveBtn.style.display = "block";
         updateExperimentalUI();
         applyFilter(); // Re-render to show edit buttons
+
+        // Track debug mode login
+        if (typeof umami !== 'undefined') {
+            umami.track('debug-login-success');
+        }
     } else {
             document.getElementById("debugLoginError").textContent = data.error;
             document.getElementById("debugLoginError").style.display = "block";
+            // Track debug login failure
+            if (typeof umami !== 'undefined') {
+                umami.track('debug-login-failed');
+            }
         }
     } catch (e) {
         console.error(e);
@@ -59,7 +68,12 @@ function logoutDebug() {
     debugMode = false;
     debugPassword = "";
     localStorage.removeItem("debugPassword");
-    
+
+    // Track debug mode logout
+    if (typeof umami !== 'undefined') {
+        umami.track('debug-logout');
+    }
+
     // Hide debug buttons
     const updateBtn = document.getElementById("updateNowBtn");
     if (updateBtn) updateBtn.style.display = "none";
@@ -67,9 +81,9 @@ function logoutDebug() {
     if (pauseBtn) pauseBtn.style.display = "none";
     const leaveBtn = document.getElementById("leaveDebugBtn");
     if (leaveBtn) leaveBtn.style.display = "none";
-    
+
     updateExperimentalUI();
-    
+
     // If updates were paused, resume them
     if (updatesPaused) {
         togglePauseUpdates();
@@ -79,7 +93,7 @@ function logoutDebug() {
     if (document.getElementById("mapTab").classList.contains("active")) {
         switchTab('departures');
     }
-    
+
     // Re-render departures to remove edit buttons
     applyFilter();
 }
@@ -89,6 +103,12 @@ function logoutDebug() {
 function toggleExperimentalFeatures() {
     const isEnabled = document.getElementById("experimentalToggle").checked;
     localStorage.setItem(EXPERIMENTAL_KEY, isEnabled);
+
+    // Track experimental features toggle
+    if (typeof umami !== 'undefined') {
+        umami.track('experimental-features-toggle', { enabled: isEnabled });
+    }
+
     updateExperimentalUI();
 }
 
@@ -158,6 +178,12 @@ async function saveDebugOverride() {
         });
         const result = await res.json();
         console.log("Debug update response:", result);
+
+        // Track debug override save
+        if (typeof umami !== 'undefined') {
+            umami.track('debug-override-save', { line: line });
+        }
+
         closeDebugEdit();
         refreshDepartures(); // Refresh data to see changes
     } catch (e) {
@@ -215,6 +241,11 @@ function searchStop() {
     }
     stopName = inputName;
 
+    // Track search event
+    if (typeof umami !== 'undefined') {
+        umami.track('station-search', { method: 'by-name', station: inputName });
+    }
+
     // Reset filters when searching a new station
     document.getElementById("lineFilter").value = "";
     document.getElementById("typeFilter").value = "";
@@ -237,6 +268,12 @@ function searchStop() {
 function quickSearch(station) {
     document.getElementById("stopInput").value = station;
     toggleClearButton();
+
+    // Track quick search
+    if (typeof umami !== 'undefined') {
+        umami.track('quick-search-button', { station: station });
+    }
+
     searchStop();
 }
 
@@ -249,6 +286,11 @@ function quickSearchById(id, displayName) {
     document.getElementById("stopInput").value = displayName;
     toggleClearButton();
     document.getElementById("stationHeader").innerText = displayName;
+
+    // Track search by ID
+    if (typeof umami !== 'undefined') {
+        umami.track('station-search', { method: 'by-id', station: displayName, stopId: id });
+    }
 
     // Reset filters when searching a new station
     document.getElementById("lineFilter").value = "";
@@ -293,6 +335,12 @@ function togglePauseUpdates() {
     if (btn) {
         btn.innerText = updatesPaused ? "Resume Updates" : "Pause Updates";
     }
+
+    // Track pause/resume updates
+    if (typeof umami !== 'undefined') {
+        umami.track('debug-toggle-pause', { paused: updatesPaused });
+    }
+
     if (!updatesPaused) {
         countdown = 30;
         refreshDepartures();
@@ -301,6 +349,11 @@ function togglePauseUpdates() {
 }
 
 function updateNow() {
+    // Track update now button
+    if (typeof umami !== 'undefined') {
+        umami.track('debug-update-now');
+    }
+
     countdown = 30;
     refreshDepartures(true);
 }
@@ -319,7 +372,7 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
 
     if (isUserSearch) {
         searchTimeout = setTimeout(() => {
-            showError("Station not found, try again.");
+            showError("Search timed out, try again.");
         }, 10000);
         // Clear the grid so we don't see old departures if a search fails
         document.getElementById("departuresGrid").innerHTML = "";
@@ -335,8 +388,25 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`);
         const result = await res.json();
 
+        if (res.status === 404) {
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+                searchTimeout = null;
+            }
+            showError("Station not found");
+            // Track search failure
+            if (typeof umami !== 'undefined') {
+                umami.track('search-failed', { station: lookupName, reason: 'not-found' });
+            }
+            return;
+        }
+
         if (result.error) {
             console.error(result.error);
+            // Track search error
+            if (typeof umami !== 'undefined') {
+                umami.track('search-failed', { station: lookupName, reason: 'error' });
+            }
             return;
         }
 
@@ -346,6 +416,17 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         }
 
         const fullStationName = result.station_name;
+
+        // Track successful search
+        if (typeof umami !== 'undefined') {
+            umami.track('search-success', { station: fullStationName });
+        }
+
+        if (result.info) {
+            showError(result.info);
+            // Auto-close info after 5 seconds since it's not a critical error
+            setTimeout(closeError, 5000);
+        }
 
         // Store the full station name and ID from API
         stopName = fullStationName;
@@ -390,7 +471,7 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
 
     if (isUserSearch) {
         searchTimeout = setTimeout(() => {
-            showError("Station not found, try again.");
+            showError("Search timed out, try again.");
         }, 10000);
         // Clear the grid so we don't see old departures if a search fails
         document.getElementById("departuresGrid").innerHTML = "";
@@ -468,6 +549,19 @@ function applyFilter() {
     const lineFilter = document.getElementById("lineFilter").value.trim();
     const typeFilter = document.getElementById("typeFilter").value;
     const wheelchairFilter = document.getElementById("wheelchairFilter").checked;
+
+    // Track filter usage
+    if (typeof umami !== 'undefined') {
+        if (lineFilter) {
+            umami.track('filter-line', { line: lineFilter });
+        }
+        if (typeFilter) {
+            umami.track('filter-type', { type: typeFilter });
+        }
+        if (wheelchairFilter) {
+            umami.track('filter-wheelchair');
+        }
+    }
 
     const filtered = lastDepartures.filter(d => {
         let lineMatch = true;
@@ -734,6 +828,12 @@ function populateStationDropdown(stations) {
 function switchStation() {
     const dropdown = document.getElementById("stationDropdown");
     const selected = JSON.parse(dropdown.value);
+
+    // Track station switch from dropdown
+    if (typeof umami !== 'undefined') {
+        umami.track('station-dropdown-switch', { station: selected.name });
+    }
+
     quickSearchById(selected.id, selected.name);
 }
 
@@ -837,12 +937,20 @@ function toggleFavorite() {
     if (index > -1) {
         // Remove from favorites
         favorites.splice(index, 1);
+        // Track favorite removal
+        if (typeof umami !== 'undefined') {
+            umami.track('favorite-remove', { station: cleanedName });
+        }
     } else {
         // Add to favorites with cleaned station name and ID from API
         favorites.push({
             id: stopId,
             name: cleanedName
         });
+        // Track favorite addition
+        if (typeof umami !== 'undefined') {
+            umami.track('favorite-add', { station: cleanedName });
+        }
     }
 
     saveFavorites(favorites);
@@ -886,6 +994,10 @@ function updateFavoritesDisplay() {
         btn.innerText = fav.name;
         btn.title = fav.name;
         btn.onclick = () => {
+            // Track favorite quick button click
+            if (typeof umami !== 'undefined') {
+                umami.track('favorite-quick-button', { station: fav.name });
+            }
             quickSearchById(fav.id, fav.name);
         };
 
@@ -906,8 +1018,15 @@ function updateFavoritesDisplay() {
 
 function removeFavorite(index) {
     const favorites = getFavorites();
+    const removedStation = favorites[index];
     favorites.splice(index, 1);
     saveFavorites(favorites);
+
+    // Track favorite removal via X button
+    if (typeof umami !== 'undefined' && removedStation) {
+        umami.track('favorite-remove-x-button', { station: removedStation.name });
+    }
+
     updateFavoriteButton();
     updateFavoritesDisplay();
 }
@@ -933,11 +1052,19 @@ function setHomeStation() {
         // Already home, maybe toggle off? The description says "this will then set that station as their home"
         // Let's allow unsetting if they click it again.
         localStorage.removeItem(HOME_STATION_KEY);
+        // Track home station unset
+        if (typeof umami !== 'undefined') {
+            umami.track('home-station-unset', { station: cleanedName });
+        }
     } else {
         localStorage.setItem(HOME_STATION_KEY, JSON.stringify({
             id: stopId,
             name: cleanedName
         }));
+        // Track home station set
+        if (typeof umami !== 'undefined') {
+            umami.track('home-station-set', { station: cleanedName });
+        }
     }
 
     updateHomeButton();
@@ -970,6 +1097,11 @@ function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.toggle('active', content.id === tabId + 'Tab');
     });
+
+    // Track tab switch
+    if (typeof umami !== 'undefined') {
+        umami.track('tab-switch', { tab: tabId });
+    }
 
     if (tabId === 'map') {
         initMap();
@@ -1161,6 +1293,11 @@ async function updateOverpassMarkers() {
 }
 
 function selectStationFromMap(name) {
+    // Track station selection from map
+    if (typeof umami !== 'undefined') {
+        umami.track('map-station-select', { station: name });
+    }
+
     switchTab('departures');
     document.getElementById('stopInput').value = name;
     searchStop();
@@ -1170,6 +1307,11 @@ function locateUser() {
     if (!navigator.geolocation) {
         alert("Geolocation is not supported by your browser.");
         return;
+    }
+
+    // Track map locate user
+    if (typeof umami !== 'undefined') {
+        umami.track('map-locate-user');
     }
 
     navigator.geolocation.getCurrentPosition(
@@ -1194,9 +1336,18 @@ function locateUser() {
             ]).addTo(map);
 
             map.setView(latlng, 16);
+
+            // Track successful geolocation
+            if (typeof umami !== 'undefined') {
+                umami.track('map-locate-success');
+            }
         },
         (error) => {
             console.error("Error getting location:", error);
+            // Track geolocation error
+            if (typeof umami !== 'undefined') {
+                umami.track('map-locate-error', { error: error.message });
+            }
         },
         {
             enableHighAccuracy: true,
@@ -1210,6 +1361,11 @@ async function locateNearestStation() {
     if (!navigator.geolocation) {
         showError("Geolocation is not supported by your browser.");
         return;
+    }
+
+    // Track locate me button click
+    if (typeof umami !== 'undefined') {
+        umami.track('locate-me-button');
     }
 
     const btn = document.getElementById("locateMeBtn");
@@ -1256,9 +1412,17 @@ async function locateNearestStation() {
                 if (nearest && nearest.tags.name) {
                     document.getElementById("stopInput").value = nearest.tags.name;
                     toggleClearButton();
+                    // Track successful nearest station found
+                    if (typeof umami !== 'undefined') {
+                        umami.track('nearest-station-found', { station: nearest.tags.name });
+                    }
                     searchStop();
                 } else {
                     showError("Could not identify the nearest station name.");
+                    // Track nearest station not found
+                    if (typeof umami !== 'undefined') {
+                        umami.track('nearest-station-not-found');
+                    }
                 }
             } catch (error) {
                 console.error("Error finding nearest station:", error);
