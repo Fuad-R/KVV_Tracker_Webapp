@@ -11,10 +11,14 @@ let map = null;
 let markersLayer = null;
 let userMarker = null;
 let searchTimeout = null;
+let openMapPopupName = null;
+let isRefreshingMapMarkers = false;
 const FAVORITES_KEY = 'kvv_favorites';
 const HOME_STATION_KEY = 'kvv_home_station';
 const EXPERIMENTAL_KEY = 'kvv_experimental_enabled';
 const DEV_LOCATION_KEY = 'kvv_dev_location_override';
+const MAP_POPUP_CACHE = new Map();
+const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
 
 // ------------------ SEARCH (BY NAME) ------------------
 
@@ -1234,6 +1238,12 @@ function initMap() {
     });
     map.addControl(new locateControl());
 
+    map.on('popupclose', () => {
+        if (!isRefreshingMapMarkers) {
+            openMapPopupName = null;
+        }
+    });
+
     map.on('moveend', () => {
         if (map.getZoom() >= 15) {
             updateOverpassMarkers();
@@ -1257,6 +1267,176 @@ function normalizeStationName(name) {
         normalized = normalized.split('/')[0].trim();
     }
     return normalized;
+}
+
+function buildMapPopupDeparturesHtml(departures) {
+    if (!departures || departures.length === 0) {
+        return '<div class="map-popup-empty">No departures found.</div>';
+    }
+
+    const platforms = {};
+    departures.forEach(d => {
+        const platformKey = d.platform ? String(d.platform).trim() : "Unknown";
+        if (!platforms[platformKey]) {
+            platforms[platformKey] = [];
+        }
+        platforms[platformKey].push(d);
+    });
+
+    const sortedPlatforms = Object.keys(platforms).sort((a, b) => {
+        const numA = parseInt(a);
+        const numB = parseInt(b);
+        if (!isNaN(numA) && !isNaN(numB)) {
+            return numA - numB;
+        }
+        return a.localeCompare(b);
+    });
+
+    const showToggle = sortedPlatforms.length > 2;
+    return sortedPlatforms.map((platform, index) => {
+        const platformDepartures = platforms[platform];
+        const departuresByLine = new Map();
+        platformDepartures.forEach(d => {
+            const existing = departuresByLine.get(d.line);
+            if (!existing || d.minutes_remaining < existing.minutes_remaining) {
+                departuresByLine.set(d.line, d);
+            }
+        });
+        const departuresForPlatform = Array.from(departuresByLine.values())
+            .sort((a, b) => a.minutes_remaining - b.minutes_remaining)
+            .slice(0, 4);
+        const serviceTypes = new Set(platformDepartures.map(d => getServiceType(d.line)));
+        const iconsHtml = Array.from(serviceTypes).map(type => (
+            `<img src="/static/icons/${type}.png" class="platform-service-icon" title="${type}">`
+        )).join('');
+
+        const rowsHtml = departuresForPlatform.map(d => {
+            const iconHtml = getLineIcon(d.line);
+            const departureDisplay = d.minutes_remaining <= 1 ? 'Arriving Now' : d.departure_display;
+            return `
+                <div class="map-popup-departure">
+                    <div class="line-info">
+                        <div class="line-icon">${iconHtml}</div>
+                        <div class="map-popup-line">
+                            <div class="line-number" style="color: ${d.color};">${d.line}</div>
+                            <div class="direction">${d.direction}</div>
+                        </div>
+                    </div>
+                    <div class="map-popup-time">${departureDisplay}</div>
+                </div>
+            `;
+        }).join('');
+
+        if (!showToggle) {
+            return `
+                <div class="map-popup-platform">
+                    <div class="map-popup-platform-header">
+                        <div class="map-popup-platform-title">
+                            <span class="platform-label">Platform ${platform}</span>
+                            <div class="map-popup-platform-icons">${iconsHtml}</div>
+                        </div>
+                    </div>
+                    ${rowsHtml}
+                </div>
+            `;
+        }
+
+        const platformKey = String(platform).replace(/"/g, '&quot;');
+        const isOpen = index === 0;
+        return `
+            <div class="map-popup-platform">
+                <button class="map-popup-platform-toggle" data-platform="${platformKey}" aria-expanded="${isOpen ? "true" : "false"}">
+                    <div class="map-popup-platform-title">
+                        <span class="platform-label">Platform ${platform}</span>
+                        <div class="map-popup-platform-icons">${iconsHtml}</div>
+                    </div>
+                    <span class="map-popup-toggle-icon">${isOpen ? "-" : "+"}</span>
+                </button>
+                <div class="map-popup-platform-content ${isOpen ? "is-open" : ""}" data-platform="${platformKey}">
+                    ${rowsHtml}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function wireMapPopupInteractions(container) {
+    if (!container || container.dataset.wired === "true") {
+        return;
+    }
+
+    container.addEventListener("click", (event) => {
+        const toggle = event.target.closest(".map-popup-platform-toggle");
+        if (!toggle) return;
+
+        const platform = toggle.getAttribute("data-platform");
+        const content = container.querySelector(`.map-popup-platform-content[data-platform="${platform}"]`);
+        if (!content) return;
+
+        container.querySelectorAll(".map-popup-platform-content.is-open").forEach(panel => {
+            if (panel !== content) {
+                panel.classList.remove("is-open");
+            }
+        });
+        container.querySelectorAll(".map-popup-platform-toggle[aria-expanded=\"true\"]").forEach(btn => {
+            if (btn !== toggle) {
+                btn.setAttribute("aria-expanded", "false");
+                const btnIcon = btn.querySelector(".map-popup-toggle-icon");
+                if (btnIcon) {
+                    btnIcon.textContent = "+";
+                }
+            }
+        });
+
+        const isOpen = content.classList.toggle("is-open");
+        toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        const icon = toggle.querySelector(".map-popup-toggle-icon");
+        if (icon) {
+            icon.textContent = isOpen ? "-" : "+";
+        }
+        if (map && map._popup) {
+            map._popup.update();
+        }
+    });
+
+    container.dataset.wired = "true";
+}
+
+async function loadMapPopupDepartures(stationName, popupContent) {
+    const container = popupContent.querySelector(".map-popup-departures");
+    if (!container) return;
+
+    const cacheKey = stationName.toLowerCase();
+    const cached = MAP_POPUP_CACHE.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < MAP_POPUP_CACHE_TTL_MS) {
+        container.innerHTML = cached.html;
+        wireMapPopupInteractions(container);
+        if (map && map._popup) {
+            map._popup.update();
+        }
+        return;
+    }
+
+    container.innerHTML = '<div class="map-popup-loading">Loading departures...</div>';
+
+    try {
+        const res = await fetch(`/search?stop=${encodeURIComponent(stationName)}`);
+        const result = await res.json();
+        if (!res.ok || result.error) {
+            throw new Error(result.error || "Failed to load departures.");
+        }
+
+        const html = buildMapPopupDeparturesHtml(result.departures);
+        container.innerHTML = html;
+        wireMapPopupInteractions(container);
+        MAP_POPUP_CACHE.set(cacheKey, { timestamp: Date.now(), html });
+        if (map && map._popup) {
+            map._popup.update();
+        }
+    } catch (error) {
+        console.error("Error loading map popup departures:", error);
+        container.innerHTML = '<div class="map-popup-error">Could not load departures.</div>';
+    }
 }
 
 async function updateOverpassMarkers() {
@@ -1284,7 +1464,9 @@ async function updateOverpassMarkers() {
             body: query
         });
         const data = await response.json();
-        
+
+        const pendingPopupName = openMapPopupName;
+        isRefreshingMapMarkers = true;
         markersLayer.clearLayers();
 
         const stopsByName = {};
@@ -1334,6 +1516,7 @@ async function updateOverpassMarkers() {
             }
         });
 
+        let popupMarkerToOpen = null;
         for (const name in stopsByName) {
             const info = stopsByName[name];
             const avgLat = info.latSum / info.count;
@@ -1359,15 +1542,33 @@ async function updateOverpassMarkers() {
                             onclick="selectStationFromMap('${name.replace(/'/g, "\\'")}')">
                         View Departures
                     </button>
+                    <div class="map-popup-departures"></div>
                 </div>
             `;
             
-            marker.bindPopup(popupContent);
+            marker.bindPopup(popupContent, {
+                autoPan: true,
+                keepInView: true,
+                autoPanPadding: [20, 20],
+                maxWidth: 320
+            });
+            marker.on('popupopen', () => {
+                openMapPopupName = name;
+                loadMapPopupDepartures(name, popupContent);
+            });
             markersLayer.addLayer(marker);
+            if (pendingPopupName && pendingPopupName === name) {
+                popupMarkerToOpen = marker;
+            }
+        }
+
+        if (popupMarkerToOpen) {
+            popupMarkerToOpen.openPopup();
         }
     } catch (error) {
         console.error('Error fetching Overpass data:', error);
     } finally {
+        isRefreshingMapMarkers = false;
         if (loadingIndicator) loadingIndicator.style.display = 'none';
     }
 }
