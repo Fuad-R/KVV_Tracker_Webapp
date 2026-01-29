@@ -154,6 +154,7 @@
                 <div style="display: flex; gap: 10px; align-items: center;">
                     <button id="updateNowBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px; background: #2e7d32;" onclick="updateNow()">Update Now</button>
                     <button id="pauseUpdatesBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px;" onclick="togglePauseUpdates()">Pause Updates</button>
+                    <button id="devLocationBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px; background: #0b6b3a;" onclick="openDevLocation()">Set Dev Location</button>
                     <button id="leaveDebugBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px; background: #666;" onclick="logoutDebug()">Leave Dev Mode</button>
                     <div class="countdown-badge" id="countdown">--</div>
                 </div>
@@ -233,6 +234,28 @@
             <div style="display: flex; gap: 10px;">
                 <button class="search-btn" onclick="saveDebugOverride()" style="flex: 1;">Save</button>
                 <button class="search-btn" onclick="clearDebugOverride()" style="flex: 1; background: #666;">Reset</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dev Location Popup -->
+<div id="devLocationPopup" class="modal">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeDevLocation()">×</button>
+        <h2 class="modal-title">Dev Location Override</h2>
+        <div class="debug-form">
+            <label for="devLatitude">Latitude:</label>
+            <input type="number" id="devLatitude" class="search-input" step="any" placeholder="e.g. 49.0069" style="margin-bottom: 15px;">
+
+            <label for="devLongitude">Longitude:</label>
+            <input type="number" id="devLongitude" class="search-input" step="any" placeholder="e.g. 8.4037" style="margin-bottom: 15px;">
+
+            <p id="devLocationError" style="color: red; display: none; margin-top: 10px;"></p>
+
+            <div style="display: flex; gap: 10px;">
+                <button class="search-btn" onclick="saveDevLocation()" style="flex: 1;">Save</button>
+                <button class="search-btn" onclick="clearDevLocation()" style="flex: 1; background: #666;">Clear</button>
             </div>
         </div>
     </div>

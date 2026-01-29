@@ -14,6 +14,7 @@ let searchTimeout = null;
 const FAVORITES_KEY = 'kvv_favorites';
 const HOME_STATION_KEY = 'kvv_home_station';
 const EXPERIMENTAL_KEY = 'kvv_experimental_enabled';
+const DEV_LOCATION_KEY = 'kvv_dev_location_override';
 
 // ------------------ SEARCH (BY NAME) ------------------
 
@@ -44,6 +45,8 @@ async function loginDebug() {
         if (pauseBtn) pauseBtn.style.display = "block";
         const leaveBtn = document.getElementById("leaveDebugBtn");
         if (leaveBtn) leaveBtn.style.display = "block";
+        const devLocationBtn = document.getElementById("devLocationBtn");
+        if (devLocationBtn) devLocationBtn.style.display = "block";
         updateExperimentalUI();
         applyFilter(); // Re-render to show edit buttons
 
@@ -81,6 +84,8 @@ function logoutDebug() {
     if (pauseBtn) pauseBtn.style.display = "none";
     const leaveBtn = document.getElementById("leaveDebugBtn");
     if (leaveBtn) leaveBtn.style.display = "none";
+    const devLocationBtn = document.getElementById("devLocationBtn");
+    if (devLocationBtn) devLocationBtn.style.display = "none";
 
     updateExperimentalUI();
 
@@ -116,6 +121,7 @@ function updateExperimentalUI() {
     const isEnabled = localStorage.getItem(EXPERIMENTAL_KEY) === "true";
     const mapBtn = document.getElementById("mapTabBtn");
     const locateMeBtn = document.getElementById("locateMeBtn");
+    const devLocationBtn = document.getElementById("devLocationBtn");
     const toggle = document.getElementById("experimentalToggle");
     
     if (toggle) toggle.checked = isEnabled;
@@ -136,6 +142,10 @@ function updateExperimentalUI() {
     if (locateMeBtn) {
         locateMeBtn.style.display = (debugMode || isEnabled) ? "flex" : "none";
     }
+
+    if (devLocationBtn) {
+        devLocationBtn.style.display = debugMode ? "block" : "none";
+    }
 }
 
 function openDebugEdit(stop_id, line, direction, stable_scheduled_time, minutes, delay) {
@@ -150,6 +160,76 @@ function openDebugEdit(stop_id, line, direction, stable_scheduled_time, minutes,
 
 function closeDebugEdit() {
     document.getElementById("debugEditPopup").style.display = "none";
+}
+
+function openDevLocation() {
+    const popup = document.getElementById("devLocationPopup");
+    const error = document.getElementById("devLocationError");
+    const coords = getDevLocationOverride();
+    if (error) error.style.display = "none";
+
+    if (coords) {
+        document.getElementById("devLatitude").value = coords.latitude;
+        document.getElementById("devLongitude").value = coords.longitude;
+    } else {
+        document.getElementById("devLatitude").value = "";
+        document.getElementById("devLongitude").value = "";
+    }
+
+    if (popup) popup.style.display = "block";
+}
+
+function closeDevLocation() {
+    const popup = document.getElementById("devLocationPopup");
+    if (popup) popup.style.display = "none";
+}
+
+function getDevLocationOverride() {
+    const stored = localStorage.getItem(DEV_LOCATION_KEY);
+    if (!stored) return null;
+    try {
+        const data = JSON.parse(stored);
+        const latitude = Number(data.latitude);
+        const longitude = Number(data.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+        return { latitude, longitude };
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveDevLocation() {
+    const error = document.getElementById("devLocationError");
+    const latitude = Number(document.getElementById("devLatitude").value);
+    const longitude = Number(document.getElementById("devLongitude").value);
+
+    if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude) ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180
+    ) {
+        if (error) {
+            error.textContent = "Please enter valid latitude and longitude values.";
+            error.style.display = "block";
+        }
+        return;
+    }
+
+    localStorage.setItem(DEV_LOCATION_KEY, JSON.stringify({ latitude, longitude }));
+    if (error) error.style.display = "none";
+    closeDevLocation();
+}
+
+function clearDevLocation() {
+    localStorage.removeItem(DEV_LOCATION_KEY);
+    document.getElementById("devLatitude").value = "";
+    document.getElementById("devLongitude").value = "";
+    const error = document.getElementById("devLocationError");
+    if (error) error.style.display = "none";
+    closeDevLocation();
 }
 
 async function saveDebugOverride() {
@@ -1358,11 +1438,6 @@ function locateUser() {
 }
 
 async function locateNearestStation() {
-    if (!navigator.geolocation) {
-        showError("Geolocation is not supported by your browser.");
-        return;
-    }
-
     // Track locate me button click
     if (typeof umami !== 'undefined') {
         umami.track('locate-me-button');
@@ -1371,65 +1446,83 @@ async function locateNearestStation() {
     const btn = document.getElementById("locateMeBtn");
     btn.classList.add("active");
 
+    const findNearestStation = async (latitude, longitude) => {
+        try {
+            // We use Overpass to find nearby public transport stops
+            const query = `
+                [out:json][timeout:10];
+                (
+                  node["public_transport"="stop_position"](around:1000, ${latitude}, ${longitude});
+                  node["railway"="stop"](around:1000, ${latitude}, ${longitude});
+                  node["railway"="station"](around:1000, ${latitude}, ${longitude});
+                  node["highway"="bus_stop"](around:1000, ${latitude}, ${longitude});
+                );
+                out body;
+            `;
+            const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if (!data.elements || data.elements.length === 0) {
+                showError("No stations found nearby.");
+                return;
+            }
+
+            // Find the nearest one
+            let nearest = null;
+            let minSubDist = Infinity;
+
+            data.elements.forEach(el => {
+                const dist = Math.sqrt(Math.pow(el.lat - latitude, 2) + Math.pow(el.lon - longitude, 2));
+                // Check for el.tags.name instead of el.name because Overpass data has tags
+                if (dist < minSubDist && el.tags && el.tags.name) {
+                    minSubDist = dist;
+                    nearest = el;
+                }
+            });
+
+            if (nearest && nearest.tags.name) {
+                document.getElementById("stopInput").value = nearest.tags.name;
+                toggleClearButton();
+                // Track successful nearest station found
+                if (typeof umami !== 'undefined') {
+                    umami.track('nearest-station-found', { station: nearest.tags.name });
+                }
+                searchStop();
+            } else {
+                showError("Could not identify the nearest station name.");
+                // Track nearest station not found
+                if (typeof umami !== 'undefined') {
+                    umami.track('nearest-station-not-found');
+                }
+            }
+        } catch (error) {
+            console.error("Error finding nearest station:", error);
+            showError("Error finding nearest station.");
+        }
+    };
+
+    const override = debugMode ? getDevLocationOverride() : null;
+    if (override) {
+        if (typeof umami !== 'undefined') {
+            umami.track('locate-me-dev-override');
+        }
+        await findNearestStation(override.latitude, override.longitude);
+        btn.classList.remove("active");
+        return;
+    }
+
+    if (!navigator.geolocation) {
+        showError("Geolocation is not supported by your browser.");
+        btn.classList.remove("active");
+        return;
+    }
+
     navigator.geolocation.getCurrentPosition(
         async (position) => {
             const { latitude, longitude } = position.coords;
-            try {
-                // We use Overpass to find nearby public transport stops
-                const query = `
-                    [out:json][timeout:10];
-                    (
-                      node["public_transport"="stop_position"](around:1000, ${latitude}, ${longitude});
-                      node["railway"="stop"](around:1000, ${latitude}, ${longitude});
-                      node["railway"="station"](around:1000, ${latitude}, ${longitude});
-                      node["highway"="bus_stop"](around:1000, ${latitude}, ${longitude});
-                    );
-                    out body;
-                `;
-                const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-                const res = await fetch(url);
-                const data = await res.json();
-
-                if (!data.elements || data.elements.length === 0) {
-                    showError("No stations found nearby.");
-                    btn.classList.remove("active");
-                    return;
-                }
-
-                // Find the nearest one
-                let nearest = null;
-                let minSubDist = Infinity;
-
-                data.elements.forEach(el => {
-                    const dist = Math.sqrt(Math.pow(el.lat - latitude, 2) + Math.pow(el.lon - longitude, 2));
-                    // Check for el.tags.name instead of el.name because Overpass data has tags
-                    if (dist < minSubDist && el.tags && el.tags.name) {
-                        minSubDist = dist;
-                        nearest = el;
-                    }
-                });
-
-                if (nearest && nearest.tags.name) {
-                    document.getElementById("stopInput").value = nearest.tags.name;
-                    toggleClearButton();
-                    // Track successful nearest station found
-                    if (typeof umami !== 'undefined') {
-                        umami.track('nearest-station-found', { station: nearest.tags.name });
-                    }
-                    searchStop();
-                } else {
-                    showError("Could not identify the nearest station name.");
-                    // Track nearest station not found
-                    if (typeof umami !== 'undefined') {
-                        umami.track('nearest-station-not-found');
-                    }
-                }
-            } catch (error) {
-                console.error("Error finding nearest station:", error);
-                showError("Error finding nearest station.");
-            } finally {
-                btn.classList.remove("active");
-            }
+            await findNearestStation(latitude, longitude);
+            btn.classList.remove("active");
         },
         (error) => {
             console.error("Geolocation error:", error);
@@ -1460,6 +1553,8 @@ window.addEventListener("DOMContentLoaded", function() {
         if (pauseBtn) pauseBtn.style.display = "block";
         const leaveBtn = document.getElementById("leaveDebugBtn");
         if (leaveBtn) leaveBtn.style.display = "block";
+        const devLocationBtn = document.getElementById("devLocationBtn");
+        if (devLocationBtn) devLocationBtn.style.display = "block";
         updateExperimentalUI();
     }
 
