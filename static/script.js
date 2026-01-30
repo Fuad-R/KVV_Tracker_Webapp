@@ -13,10 +13,10 @@ let userMarker = null;
 let searchTimeout = null;
 let openMapPopupName = null;
 let isRefreshingMapMarkers = false;
-const FAVORITES_KEY = 'kvv_favorites';
-const HOME_STATION_KEY = 'kvv_home_station';
-const EXPERIMENTAL_KEY = 'kvv_experimental_enabled';
-const DEV_LOCATION_KEY = 'kvv_dev_location_override';
+const FAVORITES_KEY = 'transit_favorites';
+const HOME_STATION_KEY = 'transit_home_station';
+const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
+const DEV_LOCATION_KEY = 'transit_dev_location_override';
 const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
 
@@ -519,7 +519,7 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         stopName = fullStationName;
         document.getElementById("stopInput").value = fullStationName;
         document.getElementById("stationHeader").innerText = fullStationName;
-        document.title = `${fullStationName} - KVV Live Departures`;
+        document.title = `${fullStationName} - Transit Live Departures`;
         toggleClearButton();
         if (result.departures.length > 0) {
             stopId = result.departures[0].stop_id;
@@ -581,7 +581,7 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
 
         document.getElementById("stationHeader").innerText =
             result.station_name;
-        document.title = `${result.station_name} - KVV Live Departures`;
+        document.title = `${result.station_name} - Transit Live Departures`;
 
         lastDepartures = result.departures;
         applyFilter();

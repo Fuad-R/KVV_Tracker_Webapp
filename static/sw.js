@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kvv-live-v3';
+const CACHE_NAME = 'transit-live-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',

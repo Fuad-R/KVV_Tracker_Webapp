@@ -1,10 +1,10 @@
-# KVV Tracker Webapp
+# Transit Tracker Webapp
 
-A Flask-based web application to track real-time departures of the KVV (Karlsruher Verkehrsverbund).
+A Flask-based web application to track real-time departures of the Transit App (Karlsruher Verkehrsverbund).
 
 ## Features
 
-- **Real-time Departures**: View live departure information for any KVV station.
+- **Real-time Departures**: View live departure information for any Transit App station.
 - **Line Colors**: Tram and S-Bahn lines are color-coded for easy identification (e.g., S-Bahn is green, Line 1 is red, etc.).
 - **Search**: Search for stations by name or by ID.
 - **Favorites & Home Station**: Save your frequently used stations for quick access.
@@ -25,7 +25,7 @@ A Flask-based web application to track real-time departures of the KVV (Karlsruh
 1. **Clone the repository**:
    ```bash
    git clone <repository-url>
-   cd KVV_Tracker_Webapp
+   cd Transit_Tracker_Webapp
    ```
 
 2. **Install dependencies**:
@@ -43,12 +43,12 @@ A Flask-based web application to track real-time departures of the KVV (Karlsruh
 
 1. **Build the Docker image**:
    ```bash
-   docker build -t kvv-tracker .
+   docker build -t transit-tracker .
    ```
 
 2. **Run the container**:
    ```bash
-   docker run -p 5000:5000 kvv-tracker
+   docker run -p 5000:5000 transit-tracker
    ```
 
 ## Usage
@@ -72,4 +72,4 @@ To enter debug mode:
 
 ## API Reference
 
-The app uses an external API: `https://kvvapi.fuadserver.uk/api`
+The app uses an external API: `https://transitapi.fuadserver.uk/api`

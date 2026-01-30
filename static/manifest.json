@@ -1,7 +1,7 @@
 {
-  "name": "KVV Live Departures",
-  "short_name": "KVV Live",
-  "description": "Live departure board for KVV (Karlsruher Verkehrsverbund)",
+  "name": "Transit Live Departures",
+  "short_name": "Transit Live",
+  "description": "Live departure board for Transit App (Karlsruher Verkehrsverbund)",
   "start_url": "/?pwa=true",
   "scope": "/",
   "display": "standalone",

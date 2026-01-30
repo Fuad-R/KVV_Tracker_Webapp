@@ -1,4 +1,4 @@
-const THEME_KEY = 'kvv_theme';
+const THEME_KEY = 'transit_theme';
 
 function initTheme() {
     const themeToggle = document.getElementById('themeToggle');

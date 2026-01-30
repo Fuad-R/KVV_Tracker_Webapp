@@ -1,8 +1,11 @@
 from flask import Flask, render_template, jsonify, request
 import requests
 from datetime import datetime, timedelta
+
+TRANSIT_APP = "Transit App"
+
 #balls
-BASE_URL = "https://kvvapi.fuadserver.uk/api"
+BASE_URL = "https://transitapi.fuadserver.uk/api"
 MAX_MINUTES = 30
 
 DEBUG_PASSWORD = "fuadsux"
@@ -74,7 +77,7 @@ def line_color(mot: int, line: str) -> str:
 # ---------------- ROUTES ----------------
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", app_name=TRANSIT_APP)
 
 
 @app.route("/sw.js")
