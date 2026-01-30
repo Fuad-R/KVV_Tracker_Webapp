@@ -279,6 +279,17 @@ body.dark-mode .moon-icon {
     width: 100%;
 }
 
+.city-search-container {
+    margin-bottom: 8px;
+}
+
+.city-input {
+    padding: 10px 18px;
+    font-size: 14px;
+    border-radius: 10px;
+    background-color: var(--bg-secondary);
+}
+
 .search-input-wrapper {
     flex: 1;
     position: relative;

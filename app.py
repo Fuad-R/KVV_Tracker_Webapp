@@ -28,19 +28,47 @@ def get_stop_departures(stop_id: str):
 
 
 # ---------------- LINE COLORS ----------------
-def line_color(line: str) -> str:
-    l = line.lower()
-    if l.startswith("s"):
+def line_color(mot: int, line: str) -> str:
+    # mot mapping:
+    # 0 train, 1 commuter railway, 2 underground train, 3 city rail, 4 tram, 
+    # 5 city bus, 6 regional bus, 7 coach, 8 cable car, 9 boat, 
+    # 10 transit on demand, 11 other, 12 airplane, 13 regional train, 
+    # 14 national train, 15 international train, 16 high-speed train, 
+    # 17 rail replacement train, 18 shuttle train, 19 Bürgerbus
+    
+    # Tram/City Rail
+    if mot in [3, 4]:
+        tram_colors = {
+            "1": "red",
+            "2": "blue",
+            "3": "brown",
+            "4": "gold",
+            "5": "lightblue",
+            "8": "orange",
+        }
+        return tram_colors.get(line, "purple")
+    
+    # S-Bahn / Commuter Rail
+    if mot == 1:
         return "green"
-    tram_colors = {
-        "1": "red",
-        "2": "blue",
-        "3": "brown",
-        "4": "gold",
-        "5": "lightblue",
-        "8": "orange",
-    }
-    return tram_colors.get(line, "purple")
+    
+    # Bus
+    if mot in [5, 6, 10, 19]:
+        return "#808080" # Grey for bus
+    
+    # Long Distance Bus
+    if mot == 7:
+        return "#b35a00" # Orange/Brown for coach
+
+    # Ferry
+    if mot == 9:
+        return "#0077be" # Ocean Blue for ferry
+        
+    # Trains
+    if mot in [0, 13, 14, 15, 16]:
+        return "#c30a37" # DB Red
+        
+    return "purple"
 
 
 # ---------------- ROUTES ----------------
@@ -62,6 +90,8 @@ def serve_manifest():
 @app.route("/search")
 def search():
     stop_name = request.args.get("stop")
+    city = request.args.get("city", "Karlsruhe") or "Karlsruhe"
+    
     if not stop_name:
         return jsonify({"error": "Stop name required"}), 400
 
@@ -75,7 +105,8 @@ def search():
         while len(current_query) >= 3:
             stop_name_api = current_query.replace(" ", "_")
             # Pull all matching stops from the API
-            r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name_api}, timeout=10)
+            params = {"q": stop_name_api, "city": city}
+            r = requests.get(f"{BASE_URL}/stops/search", params=params, timeout=10)
             r.raise_for_status()
             stops = r.json()
             
@@ -103,7 +134,12 @@ def search():
         # Add color, stop_id & formatted departure
         now = datetime.now()
         for d in data:
-            d["color"] = line_color(d["line"])
+            mot = d.get("mot", 11) # Fallback to 'other'
+            try:
+                mot = int(mot)
+            except (ValueError, TypeError):
+                mot = 11
+            d["color"] = line_color(mot, d["line"])
             d["stop_id"] = stop_id
             
             # Use delay_minutes from API or fallback to 0
@@ -174,6 +210,7 @@ def search():
 def search_by_id():
     stop_id = request.args.get("stop_id")
     station_name = request.args.get("station_name")
+    city = request.args.get("city", "Karlsruhe") or "Karlsruhe"
 
     if not stop_id:
         return jsonify({"error": "Stop ID required"}), 400
@@ -187,7 +224,12 @@ def search_by_id():
 
         now = datetime.now()
         for d in data:
-            d["color"] = line_color(d["line"])
+            mot = d.get("mot", 11) # Fallback to 'other'
+            try:
+                mot = int(mot)
+            except (ValueError, TypeError):
+                mot = 11
+            d["color"] = line_color(mot, d["line"])
             d["stop_id"] = stop_id
 
             # Use delay_minutes from API or fallback to 0

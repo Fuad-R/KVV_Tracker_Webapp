@@ -325,9 +325,11 @@ function searchStop() {
     }
     stopName = inputName;
 
+    const city = document.getElementById("cityInput").value.trim() || "Karlsruhe";
+
     // Track search event
     if (typeof umami !== 'undefined') {
-        umami.track('station-search', { method: 'by-name', station: inputName });
+        umami.track('station-search', { method: 'by-name', station: inputName, city: city });
     }
 
     // Reset filters when searching a new station
@@ -469,7 +471,8 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
             lookupName = lookupName.split('/')[0].trim();
         }
 
-        const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`);
+        const city = document.getElementById("cityInput").value.trim() || "Karlsruhe";
+        const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}&city=${encodeURIComponent(city)}`);
         const result = await res.json();
 
         if (res.status === 404) {
@@ -562,7 +565,8 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     }
 
     try {
-        const res = await fetch(`/search_by_id?stop_id=${stopId}&station_name=${encodeURIComponent(stopName)}`);
+        const city = document.getElementById("cityInput").value.trim() || "Karlsruhe";
+        const res = await fetch(`/search_by_id?stop_id=${stopId}&station_name=${encodeURIComponent(stopName)}&city=${encodeURIComponent(city)}`);
         const result = await res.json();
 
         if (result.error) {
@@ -593,38 +597,41 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
 
 // ------------------ LINE ICON ------------------
 
-function getLineIcon(line) {
-    const lineLower = line.toLowerCase();
-    const lineNumber = parseInt(line);
-
-    if (lineLower.startsWith("s")) {
-        return `<img src="/static/icons/sbahn.png" class="line-icon">`;
-    } else if (!isNaN(lineNumber) && lineNumber >= 1 && lineNumber <= 9) {
-        // Trams
-        return `<img src="/static/icons/tram.png" class="line-icon">`;
-    } else if (lineLower.startsWith("u")) {
-        // UBahn
-        return `<img src="/static/icons/ubahn.png" class="line-icon">`;
-    } else if (lineLower.startsWith("n")) {
-        // Nightline
-        return `<img src="/static/icons/nl.png" class="line-icon">`;
-    } else if (
-        lineLower.startsWith("ic") ||
-        lineLower.startsWith("re") ||
-        lineLower.startsWith("rb") ||
-        lineLower.startsWith("mex") ||
-        lineLower.startsWith("ice") ||
-        lineLower.startsWith("ir") ||
-        lineLower.startsWith("ec") ||
-        lineLower.startsWith("en")
-    ) {
-        // TrainDB
-        return `<img src="/static/icons/db.png" class="line-icon">`;
-    } else if (!isNaN(lineNumber) && lineNumber >= 10) {
-        // Buses
-        return `<img src="/static/icons/bus.png" class="line-icon">`;
+function getLineIcon(mot) {
+    const m = parseInt(mot);
+    switch(m) {
+        case 0: // train
+        case 13: // regional train
+        case 14: // national train
+        case 15: // international train
+        case 16: // high-speed train
+            return `<img src="/static/icons/db.png" class="line-icon">`;
+        case 1: // commuter railway (S-Bahn)
+            return `<img src="/static/icons/sbahn.png" class="line-icon">`;
+        case 2: // underground train
+            return `<img src="/static/icons/ubahn.png" class="line-icon">`;
+        case 3: // city rail
+            return `<img src="/static/icons/stadtbahn.png" class="line-icon">`;
+        case 4: // tram
+            return `<img src="/static/icons/tram.png" class="line-icon">`;
+        case 5: // city bus
+        case 6: // regional bus
+        case 10: // transit on demand
+        case 19: // Bürgerbus
+            return `<img src="/static/icons/bus.png" class="line-icon">`;
+        case 7: // coach
+            return `<img src="/static/icons/farbus.png" class="line-icon">`;
+        case 17: // rail replacement train
+            return `<img src="/static/icons/bus.png" class="line-icon">`; // Or separate icon if available
+        case 18: // shuttle train
+            return `<img src="/static/icons/db.png" class="line-icon">`;
+        case 8: // cable car
+            return `<img src="/static/icons/tram.png" class="line-icon">`;
+        case 9: // boat / ferry
+            return `<img src="/static/icons/ferry.png" class="line-icon">`;
+        default:
+            return `<img src="/static/icons/missing.png" class="line-icon">`;
     }
-    return "";
 }
 
 // ------------------ FILTERING ------------------
@@ -663,14 +670,14 @@ function applyFilter() {
 
         // Type filter
         if (typeFilter) {
-            const isSbahn = d.line.toLowerCase().startsWith("s");
-            const lineNumber = parseInt(d.line);
-
-            if (typeFilter === "s") typeMatch = isSbahn;
-            else if (typeFilter === "tram")
-                typeMatch = !isSbahn && lineNumber >= 1 && lineNumber <= 9;
-            else if (typeFilter === "bus")
-                typeMatch = !isSbahn && lineNumber >= 10;
+            const mot = parseInt(d.mot);
+            if (typeFilter === "s") typeMatch = (mot === 1);
+            else if (typeFilter === "stadtbahn") typeMatch = (mot === 3);
+            else if (typeFilter === "tram") typeMatch = (mot === 4);
+            else if (typeFilter === "bus") typeMatch = [5, 6, 10, 19].includes(mot);
+            else if (typeFilter === "farbus") typeMatch = (mot === 7);
+            else if (typeFilter === "ferry") typeMatch = (mot === 9);
+            else if (typeFilter === "train") typeMatch = [0, 13, 14, 15, 16, 17, 18].includes(mot);
         }
 
         // Wheelchair filter
@@ -722,7 +729,7 @@ function populateTable(data) {
         // Get unique service types for this platform
         const serviceTypes = new Set();
         platforms[platform].forEach(d => {
-            const type = getServiceType(d.line);
+            const type = getServiceType(d.mot);
             serviceTypes.add(type);
         });
 
@@ -761,7 +768,7 @@ function populateTable(data) {
                 card.className = "departure-card";
                 card.style.borderLeftColor = d.status_color || d.color;
 
-                const iconHtml = getLineIcon(d.line);
+                const iconHtml = getLineIcon(d.mot);
                 const realtimeBadge = d.is_realtime
                     ? '<div class="realtime-badge">Real-time</div>'
                     : '';
@@ -821,33 +828,37 @@ function populateTable(data) {
 }
 
 // Helper function to determine service type
-function getServiceType(line) {
-    const lineLower = line.toLowerCase();
-    const lineNumber = parseInt(line);
-
-    if (lineLower.startsWith("s")) {
-        return "sbahn";
-    } else if (lineLower.startsWith("u")) {
-        return "ubahn";
-    } else if (!isNaN(lineNumber) && lineNumber >= 1 && lineNumber <= 9) {
-        return "tram";
-    } else if (lineLower.startsWith("n")) {
-        return "nl";
-    } else if (
-        lineLower.startsWith("ic") ||
-        lineLower.startsWith("re") ||
-        lineLower.startsWith("rb") ||
-        lineLower.startsWith("mex") ||
-        lineLower.startsWith("ice") ||
-        lineLower.startsWith("ir") ||
-        lineLower.startsWith("ec") ||
-        lineLower.startsWith("en")
-    ) {
-        return "db";
-    } else if (!isNaN(lineNumber) && lineNumber >= 10) {
-        return "bus";
+function getServiceType(mot) {
+    const m = parseInt(mot);
+    switch(m) {
+        case 1:
+            return "sbahn";
+        case 2:
+            return "ubahn";
+        case 3:
+            return "stadtbahn";
+        case 4:
+            return "tram";
+        case 5:
+        case 6:
+        case 10:
+        case 19:
+            return "bus";
+        case 7:
+            return "farbus";
+        case 9:
+            return "ferry";
+        case 0:
+        case 13:
+        case 14:
+        case 15:
+        case 16:
+        case 17:
+        case 18:
+            return "db";
+        default:
+            return "other";
     }
-    return "bus";
 }
 
 
@@ -968,11 +979,17 @@ function toggleClearButton() {
 }
 
 function clearSearchInput() {
-    const input = document.getElementById("stopInput");
-    if (input) {
-        input.value = "";
-        input.focus();
+    const stopInput = document.getElementById("stopInput");
+    const cityInput = document.getElementById("cityInput");
+    if (stopInput) {
+        stopInput.value = "";
         toggleClearButton();
+    }
+    if (cityInput) {
+        cityInput.value = "";
+    }
+    if (stopInput) {
+        stopInput.focus();
     }
 }
 
@@ -1305,13 +1322,13 @@ function buildMapPopupDeparturesHtml(departures) {
         const departuresForPlatform = Array.from(departuresByLine.values())
             .sort((a, b) => a.minutes_remaining - b.minutes_remaining)
             .slice(0, 4);
-        const serviceTypes = new Set(platformDepartures.map(d => getServiceType(d.line)));
+        const serviceTypes = new Set(platformDepartures.map(d => getServiceType(d.mot)));
         const iconsHtml = Array.from(serviceTypes).map(type => (
             `<img src="/static/icons/${type}.png" class="platform-service-icon" title="${type}">`
         )).join('');
 
         const rowsHtml = departuresForPlatform.map(d => {
-            const iconHtml = getLineIcon(d.line);
+            const iconHtml = getLineIcon(d.mot);
             const departureDisplay = d.minutes_remaining <= 1 ? 'Arriving Now' : d.departure_display;
             return `
                 <div class="map-popup-departure">
