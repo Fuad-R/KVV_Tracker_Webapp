@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KVV Live Departures</title>
+    <title>{{ app_name }} Live Departures</title>
     <link rel="icon" href="/static/icons/missing.png" type="image/png">
     <link rel="stylesheet" href="/static/style.css">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#c30a37">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="KVV Live">
+    <meta name="apple-mobile-web-app-title" content="{{ app_name }} Live">
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="apple-touch-icon" href="/static/icons/missing.png">
     <link rel="apple-touch-icon" sizes="152x152" href="/static/icons/missing.png">
@@ -30,7 +30,7 @@
     <header class="header">
         <div class="header-content">
             <h1 class="app-title">
-                <img src="/static/icons/missing.png" alt="KVV Logo" class="header-logo" id="headerLogo">
+                <img src="/static/icons/missing.png" alt="{{ app_name }} Logo" class="header-logo" id="headerLogo">
                 Live
             </h1>
             <div class="header-tabs">
@@ -61,17 +61,6 @@
         <div id="departuresTab" class="tab-content active">
             <!-- Search Section -->
             <section class="search-section">
-                <div class="search-container city-search-container">
-                    <div class="search-input-wrapper">
-                        <input
-                            type="text"
-                            id="cityInput"
-                            class="search-input city-input"
-                            placeholder="City (default: Karlsruhe)"
-                            autocomplete="off"
-                        >
-                    </div>
-                </div>
                 <div class="search-container">
                     <div class="search-input-wrapper">
                         <input
@@ -96,6 +85,17 @@
                             <path d="m21 21-4.35-4.35"></path>
                         </svg>
                     </button>
+                </div>
+                <div class="search-container city-search-container">
+                    <div class="search-input-wrapper">
+                        <input
+                            type="text"
+                            id="cityInput"
+                            class="search-input city-input"
+                            placeholder="City (default: Karlsruhe)"
+                            autocomplete="off"
+                        >
+                    </div>
                     <button class="favorite-btn" id="favoriteBtn" onclick="toggleFavorite()" title="Add to favorites">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
