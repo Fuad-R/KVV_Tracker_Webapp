@@ -17,6 +17,8 @@ const FAVORITES_KEY = 'transit_favorites';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
+const ANNOUNCEMENT_KEY = 'transit_announcement_text';
+const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
 const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
 
@@ -51,6 +53,15 @@ async function loginDebug() {
         if (leaveBtn) leaveBtn.style.display = "block";
         const devLocationBtn = document.getElementById("devLocationBtn");
         if (devLocationBtn) devLocationBtn.style.display = "block";
+
+        // Show announcement bar in dev mode
+        const announcementBar = document.getElementById("announcementBar");
+        if (announcementBar) announcementBar.style.display = "flex";
+        const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
+        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
+        const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
+        if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
+
         updateExperimentalUI();
         applyFilter(); // Re-render to show edit buttons
 
@@ -91,6 +102,14 @@ function logoutDebug() {
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "none";
 
+    // Hide announcement bar when leaving dev mode
+    const announcementBar = document.getElementById("announcementBar");
+    if (announcementBar) announcementBar.style.display = "none";
+    const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
+    if (editAnnouncementBtn) editAnnouncementBtn.style.display = "none";
+    const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
+    if (announcementSettingsBtn) announcementSettingsBtn.style.display = "none";
+
     updateExperimentalUI();
 
     // If updates were paused, resume them
@@ -105,6 +124,106 @@ function logoutDebug() {
 
     // Re-render departures to remove edit buttons
     applyFilter();
+}
+
+function editAnnouncement() {
+    if (!debugMode) return;
+    const currentText = document.getElementById("announcementText").textContent;
+    const newText = prompt("Enter new announcement text:", currentText);
+    if (newText !== null) {
+        document.getElementById("announcementText").textContent = newText;
+        localStorage.setItem(ANNOUNCEMENT_KEY, newText);
+    }
+}
+
+// ------------------ ANNOUNCEMENT SETTINGS ------------------
+
+function openAnnouncementSettings() {
+    const settings = getAnnouncementSettings();
+    document.getElementById("announcementHeight").value = settings.height || 40;
+    document.getElementById("announcementFontSize").value = settings.fontSize || 16;
+    document.getElementById("announcementSpeed").value = settings.speed || 15;
+    document.getElementById("announcementBgColor").value = settings.bgColor || "#fff176";
+    document.getElementById("announcementTextColor").value = settings.textColor || "#333333";
+    
+    document.getElementById("announcementSettingsPopup").style.display = "block";
+}
+
+function closeAnnouncementSettings() {
+    document.getElementById("announcementSettingsPopup").style.display = "none";
+    // Re-apply saved settings to revert any un-saved changes made during preview
+    applyAnnouncementSettings(getAnnouncementSettings());
+}
+
+function getAnnouncementSettings() {
+    const saved = localStorage.getItem(ANNOUNCEMENT_SETTINGS_KEY);
+    if (saved) {
+        try {
+            return JSON.parse(saved);
+        } catch (e) {
+            console.error("Error parsing announcement settings:", e);
+        }
+    }
+    return {
+        height: 40,
+        fontSize: 16,
+        speed: 15,
+        bgColor: "#fff176",
+        textColor: "#333333"
+    };
+}
+
+function applyAnnouncementSettings(settings) {
+    const bar = document.getElementById("announcementBar");
+    if (!bar) return;
+
+    if (settings.height) bar.style.setProperty('--announcement-height', `${settings.height}px`);
+    if (settings.fontSize) bar.style.setProperty('--announcement-font-size', `${settings.fontSize}px`);
+    if (settings.speed) bar.style.setProperty('--announcement-speed', `${settings.speed}s`);
+    if (settings.bgColor) bar.style.setProperty('--announcement-bg', settings.bgColor);
+    if (settings.textColor) bar.style.setProperty('--announcement-text', settings.textColor);
+}
+
+function updateAnnouncementPreview() {
+    const settings = {
+        height: document.getElementById("announcementHeight").value,
+        fontSize: document.getElementById("announcementFontSize").value,
+        speed: document.getElementById("announcementSpeed").value,
+        bgColor: document.getElementById("announcementBgColor").value,
+        textColor: document.getElementById("announcementTextColor").value
+    };
+    applyAnnouncementSettings(settings);
+}
+
+function saveAnnouncementSettings() {
+    const settings = {
+        height: document.getElementById("announcementHeight").value,
+        fontSize: document.getElementById("announcementFontSize").value,
+        speed: document.getElementById("announcementSpeed").value,
+        bgColor: document.getElementById("announcementBgColor").value,
+        textColor: document.getElementById("announcementTextColor").value
+    };
+    localStorage.setItem(ANNOUNCEMENT_SETTINGS_KEY, JSON.stringify(settings));
+    applyAnnouncementSettings(settings);
+    closeAnnouncementSettings();
+}
+
+function resetAnnouncementSettings() {
+    const defaults = {
+        height: 40,
+        fontSize: 16,
+        speed: 15,
+        bgColor: "#fff176",
+        textColor: "#333333"
+    };
+    
+    document.getElementById("announcementHeight").value = defaults.height;
+    document.getElementById("announcementFontSize").value = defaults.fontSize;
+    document.getElementById("announcementSpeed").value = defaults.speed;
+    document.getElementById("announcementBgColor").value = defaults.bgColor;
+    document.getElementById("announcementTextColor").value = defaults.textColor;
+    
+    applyAnnouncementSettings(defaults);
 }
 
 // ------------------ EXPERIMENTAL FEATURES ------------------
@@ -1762,6 +1881,12 @@ window.addEventListener("DOMContentLoaded", function() {
     updateFavoritesDisplay();
     updateExperimentalUI();
     
+    // Load saved announcement
+    const savedAnnouncement = localStorage.getItem(ANNOUNCEMENT_KEY);
+    if (savedAnnouncement) {
+        document.getElementById("announcementText").textContent = savedAnnouncement;
+    }
+
     // Auto-login if password is saved
     if (debugPassword) {
         debugMode = true;
@@ -1773,6 +1898,13 @@ window.addEventListener("DOMContentLoaded", function() {
         if (leaveBtn) leaveBtn.style.display = "block";
         const devLocationBtn = document.getElementById("devLocationBtn");
         if (devLocationBtn) devLocationBtn.style.display = "block";
+
+        // Show announcement bar in dev mode
+        const announcementBar = document.getElementById("announcementBar");
+        if (announcementBar) announcementBar.style.display = "flex";
+        const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
+        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
+
         updateExperimentalUI();
     }
 
