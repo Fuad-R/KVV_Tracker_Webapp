@@ -21,16 +21,7 @@ def get_stop_id(stop_name: str):
     r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name}, timeout=10)
     r.raise_for_status()
     data = r.json()
-
-    # Case 1: API returns a list (standard search) - get the first item
-    if isinstance(data, list) and data:
-        return data[0]["id"]
-
-    # Case 2: API returns a single dictionary (exact match/direct hit)
-    if isinstance(data, dict):
-        return data.get("id")
-
-    return None
+    return data[0]["id"] if data else None
 
 
 def get_stop_departures(stop_id: str):
