@@ -18,16 +18,12 @@ app = Flask(__name__)
 
 
 def get_stop_id(stop_name: str):
-        r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name}, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        locations = data.get("locations", []) if isinstance(data, dict) else []
-        if not locations:
-            return None
-        assigned_stops = locations[0].get("assignedStops", [])
-        if not assigned_stops:
-            return None
-        return assigned_stops[0].get("id")
+    r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name}, timeout=10)
+    r.raise_for_status()
+    data = r.json()
+    if not data:
+        return None
+    return data[0].get("id")
 
 def get_stop_departures(stop_id: str):
     r = requests.get(f"{BASE_URL}/stops/{stop_id}", params={"detailed": "1", "delay": "1"}, timeout=10)
