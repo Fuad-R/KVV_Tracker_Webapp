@@ -123,14 +123,50 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
     return earthRadiusMeters * c;
 }
 
+function normalizeCoordinateNumber(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return null;
+    // Some APIs (e.g. HAFAS x/y) return coordinates as microdegrees; 180,000,000 == 180° * 1e6.
+    if (Math.abs(num) > 180 && Math.abs(num) <= 180000000) {
+        return num / 1_000_000;
+    }
+    return num;
+}
+
+function isValidLatLon(lat, lon) {
+    return Number.isFinite(lat) && Number.isFinite(lon) &&
+        lat >= -90 && lat <= 90 &&
+        lon >= -180 && lon <= 180;
+}
+
 function extractStationCoordinates(station) {
     if (!station || typeof station !== "object") return null;
-    // Transit API search responses may use lat/lon, latitude/longitude, or nested coord/location objects.
-    const nestedCoords = station.coord ?? station.location ?? {};
-    const lat = Number(station.lat ?? station.latitude ?? nestedCoords.lat);
-    const lon = Number(station.lon ?? station.longitude ?? station.lng ?? nestedCoords.lon ?? nestedCoords.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-    return { lat, lon };
+    // Transit API search responses can use lat/lon, latitude/longitude, x/y, or coord arrays [lon, lat].
+    const nestedCoords = station.coord ?? station.location ?? null;
+
+    const directLat = normalizeCoordinateNumber(station.lat ?? station.latitude ?? station.y);
+    const directLon = normalizeCoordinateNumber(station.lon ?? station.longitude ?? station.lng ?? station.x);
+    if (isValidLatLon(directLat, directLon)) {
+        return { lat: directLat, lon: directLon };
+    }
+
+    if (Array.isArray(nestedCoords) && nestedCoords.length >= 2) {
+        const lon = normalizeCoordinateNumber(nestedCoords[0]);
+        const lat = normalizeCoordinateNumber(nestedCoords[1]);
+        if (isValidLatLon(lat, lon)) {
+            return { lat, lon };
+        }
+    }
+
+    if (nestedCoords && typeof nestedCoords === "object") {
+        const lat = normalizeCoordinateNumber(nestedCoords.lat ?? nestedCoords.latitude ?? nestedCoords.y);
+        const lon = normalizeCoordinateNumber(nestedCoords.lon ?? nestedCoords.longitude ?? nestedCoords.lng ?? nestedCoords.x);
+        if (isValidLatLon(lat, lon)) {
+            return { lat, lon };
+        }
+    }
+
+    return null;
 }
 
 // ------------------ SEARCH (BY NAME) ------------------
@@ -1711,21 +1747,18 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
                 }
             });
 
-            if (!nearestStation || nearestDistance > MAP_STOP_MATCH_DISTANCE_METERS) {
-                container.innerHTML = '<div class="map-popup-empty">No nearby departures found for this stop.</div>';
-                return;
-            }
-
-            const nearestStopId = nearestStation.id;
-            const currentStopId = result.matched_stop?.id;
-            if (nearestStopId && nearestStopId !== currentStopId) {
-                const nearestStationName = nearestStation.name || stationName || stopName || String(nearestStopId);
-                const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
-                const byIdResult = await byIdResponse.json();
-                if (!byIdResponse.ok || byIdResult.error) {
-                    throw new Error(byIdResult.error || `Failed to load departures for nearest stop ${nearestStopId}.`);
+            if (nearestStation && nearestDistance <= MAP_STOP_MATCH_DISTANCE_METERS) {
+                const nearestStopId = nearestStation.id;
+                const currentStopId = result.matched_stop?.id;
+                if (nearestStopId && nearestStopId !== currentStopId) {
+                    const nearestStationName = nearestStation.name || stationName || stopName || String(nearestStopId);
+                    const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
+                    const byIdResult = await byIdResponse.json();
+                    if (!byIdResponse.ok || byIdResult.error) {
+                        throw new Error(byIdResult.error || `Failed to load departures for nearest stop ${nearestStopId}.`);
+                    }
+                    departuresToRender = byIdResult.departures || [];
                 }
-                departuresToRender = byIdResult.departures || [];
             }
         }
 
