@@ -21,6 +21,18 @@ const ANNOUNCEMENT_KEY = 'transit_announcement_text';
 const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
 const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
+const MAP_CITY_CACHE = new Map();
+const MAP_CITY_CACHE_TTL_MS = 10 * 60 * 1000;
+const MAP_CITY_CACHE_PRECISION = 3;
+const MAP_CITY_MIN_REQUEST_INTERVAL_MS = 1000;
+const MAP_CITY_FAILURE_WARN_THRESHOLD = 3;
+const MAP_CITY_NOMINATIM_URL = (typeof window !== "undefined" && window.NOMINATIM_URL)
+    ? window.NOMINATIM_URL
+    : "https://nominatim.openstreetmap.org/reverse";
+// Respect Nominatim usage policy with throttled lookups and a custom User-Agent.
+let mapCityLastRequestAt = 0;
+let mapCityFailureCount = 0;
+let mapCityRequestChain = Promise.resolve();
 // Keep stop matching strict enough to avoid wrong station matches while allowing map/stop coordinate drift.
 const MAP_STOP_MATCH_DISTANCE_METERS = 650;
 let isApplyingUrlState = false;
@@ -102,7 +114,7 @@ function applyUrlState() {
         switchTab("departures");
         if (state.mode === "station" && state.stopId) {
             setFilterInputs(state.filters);
-            quickSearchById(state.stopId, state.stopId, { resetFilters: false });
+            quickSearchById(state.stopId, "", { resetFilters: false, skipDisplayUpdate: true });
         }
     } finally {
         isApplyingUrlState = false;
@@ -630,17 +642,23 @@ function quickSearch(station) {
 // ------------------ QUICK SEARCH (BY ID) ------------------
 
 function quickSearchById(id, displayName, options = {}) {
-    const { resetFilters = true } = options;
+    const { resetFilters = true, skipDisplayUpdate = false } = options;
+    const resolvedName = typeof displayName === "string" ? displayName.trim() : "";
     stopId = id;
-    stopName = displayName;
+    stopName = resolvedName;
 
-    document.getElementById("stopInput").value = displayName;
+    if (skipDisplayUpdate) {
+        document.getElementById("stopInput").value = "";
+        document.getElementById("stationHeader").innerText = "";
+    } else {
+        document.getElementById("stopInput").value = resolvedName;
+        document.getElementById("stationHeader").innerText = resolvedName;
+    }
     toggleClearButton();
-    document.getElementById("stationHeader").innerText = displayName;
 
     // Track search by ID
     if (typeof umami !== 'undefined') {
-        umami.track('station-search', { method: 'by-id', station: displayName, stopId: id });
+        umami.track('station-search', { method: 'by-id', station: resolvedName || id, stopId: id });
     }
 
     // Reset filters when searching a new station
@@ -847,6 +865,8 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
 
         document.getElementById("stationHeader").innerText =
             result.station_name;
+        document.getElementById("stopInput").value = result.station_name;
+        toggleClearButton();
         document.title = `${result.station_name} - Transit Live Departures`;
         stopName = result.station_name;
 
@@ -1556,6 +1576,139 @@ function normalizeStationName(name) {
     return normalized;
 }
 
+function getMapLookupCoordinates(markerCoords) {
+    if (markerCoords && Number.isFinite(markerCoords.lat) && Number.isFinite(markerCoords.lon)) {
+        return { lat: markerCoords.lat, lon: markerCoords.lon };
+    }
+    if (map && typeof map.getCenter === "function") {
+        const center = map.getCenter();
+        return { lat: center.lat, lon: center.lng };
+    }
+    return null;
+}
+
+function getMapCityUserAgent() {
+    const metaTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]')?.content;
+    const appTitle = (metaTitle || document.title || "Transit Tracker Webapp").trim();
+    const origin = window.location?.origin || window.location?.href || "unknown-origin";
+    return `${appTitle} (${origin})`;
+}
+
+function escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function roundCoordinate(value, precision) {
+    const factor = 10 ** precision;
+    return Math.round(value * factor) / factor;
+}
+
+function getCityFromAddress(address = {}) {
+    if (!address || typeof address !== "object") return "";
+    return [
+        address.city,
+        address.town,
+        address.village,
+        address.municipality,
+        address.county,
+        address.state
+    ].find(value => value && String(value).trim()) || "";
+}
+
+async function resolveMapCityName(lat, lon) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
+    const cacheLat = roundCoordinate(lat, MAP_CITY_CACHE_PRECISION);
+    const cacheLon = roundCoordinate(lon, MAP_CITY_CACHE_PRECISION);
+    const cacheKey = `${cacheLat.toFixed(MAP_CITY_CACHE_PRECISION)},${cacheLon.toFixed(MAP_CITY_CACHE_PRECISION)}`;
+    const cached = MAP_CITY_CACHE.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < MAP_CITY_CACHE_TTL_MS) {
+        return cached.city;
+    }
+
+    const requestTask = async () => {
+        const elapsed = Date.now() - mapCityLastRequestAt;
+        const waitMs = Math.max(0, MAP_CITY_MIN_REQUEST_INTERVAL_MS - elapsed);
+        if (waitMs > 0) {
+            await new Promise(resolve => setTimeout(resolve, waitMs));
+        }
+        mapCityLastRequestAt = Date.now();
+
+        try {
+            const params = new URLSearchParams({
+                format: "json",
+                lat: String(lat),
+                lon: String(lon),
+                zoom: "10",
+                addressdetails: "1"
+            });
+            const response = await fetch(`${MAP_CITY_NOMINATIM_URL}?${params.toString()}`, {
+                headers: {
+                    "Accept": "application/json",
+                    "User-Agent": getMapCityUserAgent()
+                }
+            });
+            if (!response.ok) {
+                const statusText = response.statusText ? ` ${response.statusText}` : "";
+                throw new Error(`Reverse geocode failed: ${response.status}${statusText}`);
+            }
+            const data = await response.json();
+            const city = getCityFromAddress(data.address);
+            if (city) {
+                MAP_CITY_CACHE.set(cacheKey, { city, timestamp: Date.now() });
+            }
+            mapCityFailureCount = 0;
+            return city;
+        } catch (error) {
+            console.error("Error resolving map city name:", error);
+            mapCityFailureCount += 1;
+            if (mapCityFailureCount >= MAP_CITY_FAILURE_WARN_THRESHOLD) {
+                console.warn("Map city lookup failures are persisting. Check Nominatim availability or coordinates.");
+            }
+            return "";
+        }
+    };
+
+    // Keep requests serialized even when earlier lookups fail.
+    const requestPromise = mapCityRequestChain.then(
+        () => requestTask(),
+        () => requestTask()
+    );
+    mapCityRequestChain = requestPromise.catch((error) => {
+        console.error("Map city lookup queue error:", error);
+        // Keep the queue alive for future lookups even if one request fails.
+        return "";
+    });
+    return requestPromise;
+}
+
+function appendCityToStopName(stationName, cityName) {
+    const baseName = stationName ? stationName.trim() : "";
+    if (!baseName || !cityName) return baseName;
+    const normalizedCity = cityName.trim();
+    const cityPattern = new RegExp(`\\b${escapeRegex(normalizedCity)}\\b`, "i");
+    if (cityPattern.test(baseName)) return baseName;
+    return `${baseName} ${cityName}`.trim();
+}
+
+// Populate the city input only when empty so manual entries are not overridden by map lookups.
+function applyMapCityInput(cityName) {
+    if (!cityName) return;
+    const cityInput = document.getElementById("cityInput");
+    if (cityInput && !cityInput.value.trim()) {
+        cityInput.value = cityName;
+    }
+}
+
+// Build a station lookup name with city context for map-driven searches.
+async function resolveMapSearchContext(stationName, markerCoords = null) {
+    const baseName = stationName ? stationName.trim() : "";
+    if (!baseName) return { lookupName: baseName, cityName: "" };
+    const coords = getMapLookupCoordinates(markerCoords);
+    if (!coords) return { lookupName: baseName, cityName: "" };
+    const cityName = await resolveMapCityName(coords.lat, coords.lon);
+    return { lookupName: appendCityToStopName(baseName, cityName), cityName };
+}
+
 function buildMapPopupDeparturesHtml(departures) {
     if (!departures || departures.length === 0) {
         return '<div class="map-popup-empty">No departures found.</div>';
@@ -1693,7 +1846,9 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
     const container = popupContent.querySelector(".map-popup-departures");
     if (!container) return;
 
-    const cacheKey = stationName.toLowerCase();
+    const { lookupName, cityName } = await resolveMapSearchContext(stationName, markerCoords);
+    applyMapCityInput(cityName);
+    const cacheKey = (lookupName || "").toLowerCase();
     const cached = MAP_POPUP_CACHE.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < MAP_POPUP_CACHE_TTL_MS) {
         container.innerHTML = cached.html;
@@ -1707,7 +1862,7 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
     container.innerHTML = '<div class="map-popup-loading">Loading departures...</div>';
 
     try {
-        const res = await fetch(`/search?stop=${encodeURIComponent(stationName)}`);
+        const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`);
         const result = await res.json();
         if (!res.ok || result.error) {
             throw new Error(result.error || "Failed to load departures.");
@@ -1874,13 +2029,19 @@ async function updateOverpassMarkers() {
             popupContent.innerHTML = `
                 <div style="font-family: sans-serif; min-width: 150px;">
                     <strong style="display: block; margin-bottom: 8px;">${name}</strong>
-                    <button class="search-btn" style="padding: 6px 12px; font-size: 12px; width: 100%;" 
-                            onclick="selectStationFromMap('${name.replace(/'/g, "\\'")}')">
+                    <button class="search-btn" style="padding: 6px 12px; font-size: 12px; width: 100%;">
                         View Departures
                     </button>
                     <div class="map-popup-departures"></div>
                 </div>
             `;
+            const searchBtn = popupContent.querySelector(".search-btn");
+            if (searchBtn) {
+                searchBtn.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    selectStationFromMap(name, avgLat, avgLon);
+                });
+            }
             
             marker.bindPopup(popupContent, {
                 autoPan: true,
@@ -1909,14 +2070,17 @@ async function updateOverpassMarkers() {
     }
 }
 
-function selectStationFromMap(name) {
+async function selectStationFromMap(name, lat, lon) {
     // Track station selection from map
     if (typeof umami !== 'undefined') {
         umami.track('map-station-select', { station: name });
     }
 
     switchTab('departures');
-    document.getElementById('stopInput').value = name;
+    const { lookupName, cityName } = await resolveMapSearchContext(name, { lat, lon });
+    applyMapCityInput(cityName);
+    document.getElementById('stopInput').value = lookupName || name;
+    toggleClearButton();
     searchStop();
 }
 
@@ -2113,7 +2277,7 @@ window.addEventListener("DOMContentLoaded", function() {
         switchTab("map");
     } else if (urlState.mode === "station" && urlState.stopId) {
         setFilterInputs(urlState.filters);
-        quickSearchById(urlState.stopId, urlState.stopId, { resetFilters: false });
+        quickSearchById(urlState.stopId, "", { resetFilters: false, skipDisplayUpdate: true });
     } else {
         const home = getHomeStation();
         if (home) {
