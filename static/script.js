@@ -25,10 +25,13 @@ const MAP_CITY_CACHE = new Map();
 const MAP_CITY_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAP_CITY_CACHE_PRECISION = 3;
 const MAP_CITY_MIN_REQUEST_INTERVAL_MS = 1000;
+const MAP_CITY_FAILURE_WARN_THRESHOLD = 3;
 const MAP_CITY_NOMINATIM_URL = (typeof window !== "undefined" && window.NOMINATIM_URL)
     ? window.NOMINATIM_URL
     : "https://nominatim.openstreetmap.org/reverse";
+// Respect Nominatim usage policy with throttled lookups and a custom User-Agent.
 let mapCityLastRequestAt = 0;
+let mapCityFailureCount = 0;
 let mapCityRequestChain = Promise.resolve();
 // Keep stop matching strict enough to avoid wrong station matches while allowing map/stop coordinate drift.
 const MAP_STOP_MATCH_DISTANCE_METERS = 650;
@@ -1595,6 +1598,11 @@ function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function roundCoordinate(value, precision) {
+    const factor = 10 ** precision;
+    return Math.round(value * factor) / factor;
+}
+
 function getCityFromAddress(address = {}) {
     if (!address || typeof address !== "object") return "";
     return [
@@ -1609,7 +1617,9 @@ function getCityFromAddress(address = {}) {
 
 async function resolveMapCityName(lat, lon) {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
-    const cacheKey = `${lat.toFixed(MAP_CITY_CACHE_PRECISION)},${lon.toFixed(MAP_CITY_CACHE_PRECISION)}`;
+    const cacheLat = roundCoordinate(lat, MAP_CITY_CACHE_PRECISION);
+    const cacheLon = roundCoordinate(lon, MAP_CITY_CACHE_PRECISION);
+    const cacheKey = `${cacheLat.toFixed(MAP_CITY_CACHE_PRECISION)},${cacheLon.toFixed(MAP_CITY_CACHE_PRECISION)}`;
     const cached = MAP_CITY_CACHE.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < MAP_CITY_CACHE_TTL_MS) {
         return cached.city;
@@ -1646,9 +1656,14 @@ async function resolveMapCityName(lat, lon) {
             if (city) {
                 MAP_CITY_CACHE.set(cacheKey, { city, timestamp: Date.now() });
             }
+            mapCityFailureCount = 0;
             return city;
         } catch (error) {
             console.error("Error resolving map city name:", error);
+            mapCityFailureCount += 1;
+            if (mapCityFailureCount >= MAP_CITY_FAILURE_WARN_THRESHOLD) {
+                console.warn("Map city lookup failures are persisting. Check Nominatim availability or coordinates.");
+            }
             return "";
         }
     };
