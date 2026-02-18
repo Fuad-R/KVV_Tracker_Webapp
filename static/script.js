@@ -126,7 +126,7 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
 function normalizeCoordinateNumber(value) {
     const num = Number(value);
     if (!Number.isFinite(num)) return null;
-    // Some APIs return coordinates as microdegrees (e.g. x/y from HAFAS).
+    // Some APIs (e.g. HAFAS x/y) return coordinates as microdegrees; 180,000,000 == 180° * 1e6.
     if (Math.abs(num) > 180 && Math.abs(num) <= 180000000) {
         return num / 1_000_000;
     }
