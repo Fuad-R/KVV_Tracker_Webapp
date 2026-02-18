@@ -25,7 +25,9 @@ const MAP_CITY_CACHE = new Map();
 const MAP_CITY_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAP_CITY_CACHE_PRECISION = 3;
 const MAP_CITY_MIN_REQUEST_INTERVAL_MS = 1000;
-const MAP_CITY_NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse";
+const MAP_CITY_NOMINATIM_URL = (typeof window !== "undefined" && window.NOMINATIM_URL)
+    ? window.NOMINATIM_URL
+    : "https://nominatim.openstreetmap.org/reverse";
 let mapCityLastRequestAt = 0;
 let mapCityRequestChain = Promise.resolve();
 // Keep stop matching strict enough to avoid wrong station matches while allowing map/stop coordinate drift.
@@ -1622,7 +1624,7 @@ async function resolveMapCityName(lat, lon) {
 
         try {
             const params = new URLSearchParams({
-                format: "jsonv2",
+                format: "json",
                 lat: String(lat),
                 lon: String(lon),
                 zoom: "10",
@@ -1651,10 +1653,13 @@ async function resolveMapCityName(lat, lon) {
     };
 
     // Keep requests serialized even when earlier lookups fail.
-    const requestPromise = mapCityRequestChain.then(() => requestTask(), () => requestTask());
+    const requestPromise = mapCityRequestChain.then(
+        () => requestTask(),
+        () => requestTask() // run request task even if prior lookup failed
+    );
     mapCityRequestChain = requestPromise.catch((error) => {
         console.error("Map city lookup queue error:", error);
-        return null;
+        return "";
     });
     return requestPromise;
 }
