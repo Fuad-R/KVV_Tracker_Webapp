@@ -23,7 +23,9 @@ const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
 const MAP_CITY_CACHE = new Map();
 const MAP_CITY_CACHE_TTL_MS = 10 * 60 * 1000;
+const MAP_CITY_CACHE_PRECISION = 3;
 const MAP_CITY_MIN_REQUEST_INTERVAL_MS = 1000;
+const MAP_CITY_NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse";
 const MAP_CITY_USER_AGENT = "KVV Tracker Webapp (https://github.com/Fuad-R/KVV_Tracker_Webapp)";
 let mapCityLastRequestAt = 0;
 let mapCityRequestChain = Promise.resolve();
@@ -1583,7 +1585,7 @@ function getMapLookupCoordinates(markerCoords) {
 
 async function resolveMapCityName(lat, lon) {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
-    const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    const cacheKey = `${lat.toFixed(MAP_CITY_CACHE_PRECISION)},${lon.toFixed(MAP_CITY_CACHE_PRECISION)}`;
     const cached = MAP_CITY_CACHE.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < MAP_CITY_CACHE_TTL_MS) {
         return cached.city;
@@ -1598,7 +1600,7 @@ async function resolveMapCityName(lat, lon) {
         mapCityLastRequestAt = Date.now();
 
         try {
-            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=10&addressdetails=1`, {
+            const response = await fetch(`${MAP_CITY_NOMINATIM_URL}?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=10&addressdetails=1`, {
                 headers: {
                     "Accept": "application/json",
                     "User-Agent": MAP_CITY_USER_AGENT
@@ -1620,7 +1622,7 @@ async function resolveMapCityName(lat, lon) {
         }
     };
 
-    const requestPromise = mapCityRequestChain.then(requestTask, requestTask);
+    const requestPromise = mapCityRequestChain.then(() => requestTask(), () => requestTask());
     mapCityRequestChain = requestPromise.catch(() => {});
     return requestPromise;
 }
