@@ -16,7 +16,6 @@
     <div class="search-bar">
         <input type="text" id="stopInput" placeholder="Enter stop name">
         <button onclick="searchStop()">Search</button>
-        <button onclick="setMapMode(true)">Map mode</button>
         <span id="countdown">Next update in: -- s</span>
     </div>
 
@@ -58,12 +57,6 @@
             <option value="tram">Tram</option>
             <option value="bus">Bus</option>
             <option value="s">S-Bahn</option>
-        </select>
-
-        <select id="accessibilityFilter" onchange="applyFilter()">
-            <option value="">All accessibility</option>
-            <option value="yes">Wheelchair accessible</option>
-            <option value="no">Not wheelchair accessible</option>
         </select>
     </div>
 
