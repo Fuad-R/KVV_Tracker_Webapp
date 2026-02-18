@@ -1583,6 +1583,17 @@ function getMapLookupCoordinates(markerCoords) {
     return null;
 }
 
+function getCityFromAddress(address = {}) {
+    return [
+        address.city,
+        address.town,
+        address.village,
+        address.municipality,
+        address.county,
+        address.state
+    ].find(value => value && String(value).trim()) || "";
+}
+
 async function resolveMapCityName(lat, lon) {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
     const cacheKey = `${lat.toFixed(MAP_CITY_CACHE_PRECISION)},${lon.toFixed(MAP_CITY_CACHE_PRECISION)}`;
@@ -1600,7 +1611,14 @@ async function resolveMapCityName(lat, lon) {
         mapCityLastRequestAt = Date.now();
 
         try {
-            const response = await fetch(`${MAP_CITY_NOMINATIM_URL}?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=10&addressdetails=1`, {
+            const params = new URLSearchParams({
+                format: "jsonv2",
+                lat: String(lat),
+                lon: String(lon),
+                zoom: "10",
+                addressdetails: "1"
+            });
+            const response = await fetch(`${MAP_CITY_NOMINATIM_URL}?${params.toString()}`, {
                 headers: {
                     "Accept": "application/json",
                     "User-Agent": MAP_CITY_USER_AGENT
@@ -1610,8 +1628,7 @@ async function resolveMapCityName(lat, lon) {
                 throw new Error(`Reverse geocode failed (${response.status}).`);
             }
             const data = await response.json();
-            const address = data.address || {};
-            const city = address.city || address.town || address.village || address.municipality || address.county || address.state || "";
+            const city = getCityFromAddress(data.address);
             if (city) {
                 MAP_CITY_CACHE.set(cacheKey, { city, timestamp: Date.now() });
             }
@@ -1622,6 +1639,7 @@ async function resolveMapCityName(lat, lon) {
         }
     };
 
+    // Keep requests serialized even when earlier lookups fail.
     const requestPromise = mapCityRequestChain.then(() => requestTask(), () => requestTask());
     mapCityRequestChain = requestPromise.catch(() => {});
     return requestPromise;
