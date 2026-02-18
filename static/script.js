@@ -1591,7 +1591,7 @@ function getMapCityUserAgent() {
     return `${appTitle} (${origin})`;
 }
 
-function escapeRegExp(value) {
+function escapeRegExpSpecialChars(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
@@ -1655,7 +1655,7 @@ async function resolveMapCityName(lat, lon) {
     // Keep requests serialized even when earlier lookups fail.
     const requestPromise = mapCityRequestChain.then(
         () => requestTask(),
-        () => requestTask() // run request task even if prior lookup failed
+        () => requestTask() // Run request task even if prior lookup failed
     );
     mapCityRequestChain = requestPromise.catch((error) => {
         console.error("Map city lookup queue error:", error);
@@ -1668,7 +1668,7 @@ function appendCityToStopName(stationName, cityName) {
     const baseName = stationName ? stationName.trim() : "";
     if (!baseName || !cityName) return baseName;
     const normalizedCity = cityName.trim();
-    const cityPattern = new RegExp(`\\b${escapeRegExp(normalizedCity)}\\b`, "i");
+    const cityPattern = new RegExp(`\\b${escapeRegExpSpecialChars(normalizedCity)}\\b`, "i");
     if (cityPattern.test(baseName)) return baseName;
     return `${baseName} ${cityName}`.trim();
 }
