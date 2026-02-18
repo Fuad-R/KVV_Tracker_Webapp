@@ -1596,6 +1596,7 @@ function escapeRegex(value) {
 }
 
 function getCityFromAddress(address = {}) {
+    if (!address || typeof address !== "object") return "";
     return [
         address.city,
         address.town,
@@ -1659,6 +1660,7 @@ async function resolveMapCityName(lat, lon) {
     );
     mapCityRequestChain = requestPromise.catch((error) => {
         console.error("Map city lookup queue error:", error);
+        // Keep the queue alive for future lookups even if one request fails.
         return "";
     });
     return requestPromise;
@@ -1673,7 +1675,7 @@ function appendCityToStopName(stationName, cityName) {
     return `${baseName} ${cityName}`.trim();
 }
 
-// Populate the city input when empty to preserve manual overrides.
+// Populate the city input only when empty so manual entries are not overridden by map lookups.
 function applyMapCityInput(cityName) {
     if (!cityName) return;
     const cityInput = document.getElementById("cityInput");
@@ -2012,13 +2014,19 @@ async function updateOverpassMarkers() {
             popupContent.innerHTML = `
                 <div style="font-family: sans-serif; min-width: 150px;">
                     <strong style="display: block; margin-bottom: 8px;">${name}</strong>
-                    <button class="search-btn" style="padding: 6px 12px; font-size: 12px; width: 100%;" 
-                            onclick="selectStationFromMap('${name.replace(/'/g, "\\'")}', ${avgLat}, ${avgLon})">
+                    <button class="search-btn" style="padding: 6px 12px; font-size: 12px; width: 100%;">
                         View Departures
                     </button>
                     <div class="map-popup-departures"></div>
                 </div>
             `;
+            const searchBtn = popupContent.querySelector(".search-btn");
+            if (searchBtn) {
+                searchBtn.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    selectStationFromMap(name, avgLat, avgLon);
+                });
+            }
             
             marker.bindPopup(popupContent, {
                 autoPan: true,
