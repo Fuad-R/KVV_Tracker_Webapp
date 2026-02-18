@@ -7,6 +7,7 @@ BASE_URL = "https://kvvapi.fuadserver.uk/api"
 MAX_MINUTES = 30
 MIN_DISTANCE_THRESHOLD_M = 500
 MAX_DISTANCE_THRESHOLD_M = 700
+DEFAULT_DISTANCE_THRESHOLD_M = 600
 
 app = Flask(__name__, template_folder="Templates")
 
@@ -129,7 +130,7 @@ def search_by_id():
         data = get_stop_departures(stop_id)
         lat = request.args.get("lat", type=float)
         lon = request.args.get("lon", type=float)
-        max_distance_m = request.args.get("max_distance_m", default=600, type=float)
+        max_distance_m = request.args.get("max_distance_m", default=DEFAULT_DISTANCE_THRESHOLD_M, type=float)
         max_distance_m = max(MIN_DISTANCE_THRESHOLD_M, min(MAX_DISTANCE_THRESHOLD_M, max_distance_m))
 
         if lat is not None and lon is not None:
