@@ -16,12 +16,16 @@ app = Flask(__name__)
 
 # ---------------- API ----------------
 
+def extract_search_locations(payload):
+    """Normalize stop search payloads to location entries (or [] for unknown payloads)."""
+    if isinstance(payload, dict):
+        return payload.get("locations", [])
+    return payload if isinstance(payload, list) else []
 
 def get_stop_id(stop_name: str):
     r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name}, timeout=10)
     r.raise_for_status()
-    data = r.json()
-    stops = data.get("locations", []) if isinstance(data, dict) else data
+    stops = extract_search_locations(r.json())
     if not stops:
         return None
     return stops[0].get("id")
@@ -95,7 +99,7 @@ def serve_manifest():
 @app.route("/search")
 def search():
     stop_name = request.args.get("stop")
-    
+
     if not stop_name:
         return jsonify({"error": "Stop name required"}), 400
 
@@ -111,8 +115,7 @@ def search():
             # Pull all matching stops from the API
             r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name_api}, timeout=10)
             r.raise_for_status()
-            search_data = r.json()
-            stops = search_data.get("locations", []) if isinstance(search_data, dict) else search_data
+            stops = extract_search_locations(r.json())
             
             if stops:
                 break
