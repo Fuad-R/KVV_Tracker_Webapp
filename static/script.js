@@ -23,6 +23,10 @@ const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
 const MAP_CITY_CACHE = new Map();
 const MAP_CITY_CACHE_TTL_MS = 10 * 60 * 1000;
+const MAP_CITY_MIN_REQUEST_INTERVAL_MS = 1000;
+const MAP_CITY_USER_AGENT = "KVV Tracker Webapp (https://github.com/Fuad-R/KVV_Tracker_Webapp)";
+let mapCityLastRequestAt = 0;
+let mapCityRequestChain = Promise.resolve();
 // Keep stop matching strict enough to avoid wrong station matches while allowing map/stop coordinate drift.
 const MAP_STOP_MATCH_DISTANCE_METERS = 650;
 let isApplyingUrlState = false;
@@ -1579,28 +1583,46 @@ function getMapLookupCoordinates(markerCoords) {
 
 async function resolveMapCityName(lat, lon) {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
-    const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+    const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
     const cached = MAP_CITY_CACHE.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < MAP_CITY_CACHE_TTL_MS) {
         return cached.city;
     }
 
-    try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=10&addressdetails=1`);
-        if (!response.ok) {
-            throw new Error(`Reverse geocode failed (${response.status}).`);
+    const requestTask = async () => {
+        const elapsed = Date.now() - mapCityLastRequestAt;
+        const waitMs = Math.max(0, MAP_CITY_MIN_REQUEST_INTERVAL_MS - elapsed);
+        if (waitMs > 0) {
+            await new Promise(resolve => setTimeout(resolve, waitMs));
         }
-        const data = await response.json();
-        const address = data.address || {};
-        const city = address.city || address.town || address.village || address.municipality || address.county || address.state || "";
-        if (city) {
-            MAP_CITY_CACHE.set(cacheKey, { city, timestamp: Date.now() });
+        mapCityLastRequestAt = Date.now();
+
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=10&addressdetails=1`, {
+                headers: {
+                    "Accept": "application/json",
+                    "User-Agent": MAP_CITY_USER_AGENT
+                }
+            });
+            if (!response.ok) {
+                throw new Error(`Reverse geocode failed (${response.status}).`);
+            }
+            const data = await response.json();
+            const address = data.address || {};
+            const city = address.city || address.town || address.village || address.municipality || address.county || address.state || "";
+            if (city) {
+                MAP_CITY_CACHE.set(cacheKey, { city, timestamp: Date.now() });
+            }
+            return city;
+        } catch (error) {
+            console.error("Error resolving map city name:", error);
+            return "";
         }
-        return city;
-    } catch (error) {
-        console.error("Error resolving map city name:", error);
-        return "";
-    }
+    };
+
+    const requestPromise = mapCityRequestChain.then(requestTask, requestTask);
+    mapCityRequestChain = requestPromise.catch(() => {});
+    return requestPromise;
 }
 
 function appendCityToStopName(stationName, cityName) {
