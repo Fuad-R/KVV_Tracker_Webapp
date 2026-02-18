@@ -21,6 +21,7 @@ const ANNOUNCEMENT_KEY = 'transit_announcement_text';
 const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
 const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
+// Keep stop matching strict enough to avoid wrong station matches while allowing map/stop coordinate drift.
 const MAP_STOP_MATCH_DISTANCE_METERS = 650;
 let isApplyingUrlState = false;
 
@@ -124,8 +125,10 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
 
 function extractStationCoordinates(station) {
     if (!station || typeof station !== "object") return null;
-    const lat = Number(station.lat ?? station.latitude ?? station.coord?.lat ?? station.location?.lat);
-    const lon = Number(station.lon ?? station.lng ?? station.longitude ?? station.coord?.lon ?? station.location?.lon ?? station.coord?.lng ?? station.location?.lng);
+    // Transit API search responses may use lat/lon, latitude/longitude, or nested coord/location objects.
+    const nestedCoords = station.coord ?? station.location ?? {};
+    const lat = Number(station.lat ?? station.latitude ?? nestedCoords.lat);
+    const lon = Number(station.lon ?? station.longitude ?? station.lng ?? nestedCoords.lon ?? nestedCoords.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
     return { lat, lon };
 }
@@ -1683,10 +1686,17 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
             if (result.matched_stop) {
                 nearbyCandidates.push(result.matched_stop);
             }
+            const uniqueCandidates = Object.values(
+                nearbyCandidates.reduce((acc, station) => {
+                    const key = station?.id || station?.name;
+                    if (key && !acc[key]) acc[key] = station;
+                    return acc;
+                }, {})
+            );
 
             let nearestStation = null;
             let nearestDistance = Infinity;
-            nearbyCandidates.forEach((station) => {
+            uniqueCandidates.forEach((station) => {
                 const coords = extractStationCoordinates(station);
                 if (!coords) return;
                 const distanceMeters = calculateDistanceMeters(
@@ -1707,12 +1717,13 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
             }
 
             const nearestStopId = nearestStation.id;
-            const currentStopId = result.departures?.[0]?.stop_id;
+            const currentStopId = result.matched_stop?.id;
             if (nearestStopId && nearestStopId !== currentStopId) {
-                const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStation.name || stationName)}`);
+                const nearestStationName = nearestStation.name || stationName || stopName || String(nearestStopId);
+                const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
                 const byIdResult = await byIdResponse.json();
                 if (!byIdResponse.ok || byIdResult.error) {
-                    throw new Error(byIdResult.error || "Failed to load matched stop departures.");
+                    throw new Error(byIdResult.error || `Failed to load departures for nearest stop ${nearestStopId}.`);
                 }
                 departuresToRender = byIdResult.departures || [];
             }
