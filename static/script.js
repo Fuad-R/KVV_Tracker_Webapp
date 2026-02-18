@@ -21,6 +21,8 @@ const ANNOUNCEMENT_KEY = 'transit_announcement_text';
 const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
 const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
+const MAP_CITY_CACHE = new Map();
+const MAP_CITY_CACHE_TTL_MS = 10 * 60 * 1000;
 // Keep stop matching strict enough to avoid wrong station matches while allowing map/stop coordinate drift.
 const MAP_STOP_MATCH_DISTANCE_METERS = 650;
 let isApplyingUrlState = false;
@@ -102,7 +104,7 @@ function applyUrlState() {
         switchTab("departures");
         if (state.mode === "station" && state.stopId) {
             setFilterInputs(state.filters);
-            quickSearchById(state.stopId, state.stopId, { resetFilters: false });
+            quickSearchById(state.stopId, "", { resetFilters: false, skipDisplayUpdate: true });
         }
     } finally {
         isApplyingUrlState = false;
@@ -630,17 +632,23 @@ function quickSearch(station) {
 // ------------------ QUICK SEARCH (BY ID) ------------------
 
 function quickSearchById(id, displayName, options = {}) {
-    const { resetFilters = true } = options;
+    const { resetFilters = true, skipDisplayUpdate = false } = options;
+    const resolvedName = typeof displayName === "string" ? displayName.trim() : "";
     stopId = id;
-    stopName = displayName;
+    stopName = resolvedName;
 
-    document.getElementById("stopInput").value = displayName;
+    if (skipDisplayUpdate) {
+        document.getElementById("stopInput").value = "";
+        document.getElementById("stationHeader").innerText = "";
+    } else {
+        document.getElementById("stopInput").value = resolvedName;
+        document.getElementById("stationHeader").innerText = resolvedName;
+    }
     toggleClearButton();
-    document.getElementById("stationHeader").innerText = displayName;
 
     // Track search by ID
     if (typeof umami !== 'undefined') {
-        umami.track('station-search', { method: 'by-id', station: displayName, stopId: id });
+        umami.track('station-search', { method: 'by-id', station: resolvedName || id, stopId: id });
     }
 
     // Reset filters when searching a new station
@@ -847,6 +855,8 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
 
         document.getElementById("stationHeader").innerText =
             result.station_name;
+        document.getElementById("stopInput").value = result.station_name;
+        toggleClearButton();
         document.title = `${result.station_name} - Transit Live Departures`;
         stopName = result.station_name;
 
@@ -1556,6 +1566,67 @@ function normalizeStationName(name) {
     return normalized;
 }
 
+function getMapLookupCoordinates(markerCoords) {
+    if (markerCoords && Number.isFinite(markerCoords.lat) && Number.isFinite(markerCoords.lon)) {
+        return { lat: markerCoords.lat, lon: markerCoords.lon };
+    }
+    if (map && typeof map.getCenter === "function") {
+        const center = map.getCenter();
+        return { lat: center.lat, lon: center.lng };
+    }
+    return null;
+}
+
+async function resolveMapCityName(lat, lon) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
+    const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+    const cached = MAP_CITY_CACHE.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < MAP_CITY_CACHE_TTL_MS) {
+        return cached.city;
+    }
+
+    try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=10&addressdetails=1`);
+        if (!response.ok) {
+            throw new Error(`Reverse geocode failed (${response.status}).`);
+        }
+        const data = await response.json();
+        const address = data.address || {};
+        const city = address.city || address.town || address.village || address.municipality || address.county || address.state || "";
+        if (city) {
+            MAP_CITY_CACHE.set(cacheKey, { city, timestamp: Date.now() });
+        }
+        return city;
+    } catch (error) {
+        console.error("Error resolving map city name:", error);
+        return "";
+    }
+}
+
+function appendCityToStopName(stationName, cityName) {
+    const baseName = stationName ? stationName.trim() : "";
+    if (!baseName || !cityName) return baseName;
+    const normalizedStation = baseName.toLowerCase();
+    const normalizedCity = cityName.toLowerCase();
+    if (normalizedStation.includes(normalizedCity)) return baseName;
+    return `${baseName} ${cityName}`.trim();
+}
+
+async function buildMapSearchName(stationName, markerCoords = null) {
+    const baseName = stationName ? stationName.trim() : "";
+    if (!baseName) return baseName;
+    const coords = getMapLookupCoordinates(markerCoords);
+    if (!coords) return baseName;
+    const cityName = await resolveMapCityName(coords.lat, coords.lon);
+    if (cityName) {
+        const cityInput = document.getElementById("cityInput");
+        if (cityInput && !cityInput.value.trim()) {
+            cityInput.value = cityName;
+        }
+    }
+    return appendCityToStopName(baseName, cityName);
+}
+
 function buildMapPopupDeparturesHtml(departures) {
     if (!departures || departures.length === 0) {
         return '<div class="map-popup-empty">No departures found.</div>';
@@ -1693,7 +1764,8 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
     const container = popupContent.querySelector(".map-popup-departures");
     if (!container) return;
 
-    const cacheKey = stationName.toLowerCase();
+    const lookupName = (await buildMapSearchName(stationName, markerCoords)) || stationName || "";
+    const cacheKey = lookupName.toLowerCase();
     const cached = MAP_POPUP_CACHE.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < MAP_POPUP_CACHE_TTL_MS) {
         container.innerHTML = cached.html;
@@ -1707,7 +1779,7 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
     container.innerHTML = '<div class="map-popup-loading">Loading departures...</div>';
 
     try {
-        const res = await fetch(`/search?stop=${encodeURIComponent(stationName)}`);
+        const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`);
         const result = await res.json();
         if (!res.ok || result.error) {
             throw new Error(result.error || "Failed to load departures.");
@@ -1875,7 +1947,7 @@ async function updateOverpassMarkers() {
                 <div style="font-family: sans-serif; min-width: 150px;">
                     <strong style="display: block; margin-bottom: 8px;">${name}</strong>
                     <button class="search-btn" style="padding: 6px 12px; font-size: 12px; width: 100%;" 
-                            onclick="selectStationFromMap('${name.replace(/'/g, "\\'")}')">
+                            onclick="selectStationFromMap('${name.replace(/'/g, "\\'")}', ${avgLat}, ${avgLon})">
                         View Departures
                     </button>
                     <div class="map-popup-departures"></div>
@@ -1909,14 +1981,16 @@ async function updateOverpassMarkers() {
     }
 }
 
-function selectStationFromMap(name) {
+async function selectStationFromMap(name, lat, lon) {
     // Track station selection from map
     if (typeof umami !== 'undefined') {
         umami.track('map-station-select', { station: name });
     }
 
     switchTab('departures');
-    document.getElementById('stopInput').value = name;
+    const lookupName = await buildMapSearchName(name, { lat, lon });
+    document.getElementById('stopInput').value = lookupName || name;
+    toggleClearButton();
     searchStop();
 }
 
@@ -2113,7 +2187,7 @@ window.addEventListener("DOMContentLoaded", function() {
         switchTab("map");
     } else if (urlState.mode === "station" && urlState.stopId) {
         setFilterInputs(urlState.filters);
-        quickSearchById(urlState.stopId, urlState.stopId, { resetFilters: false });
+        quickSearchById(urlState.stopId, "", { resetFilters: false, skipDisplayUpdate: true });
     } else {
         const home = getHomeStation();
         if (home) {
