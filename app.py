@@ -81,8 +81,9 @@ def line_color(mot: int, line: str) -> str:
 
 
 # ---------------- ROUTES ----------------
-@app.route("/")
-def index():
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def index(path):
     return render_template("index.html", app_name=TRANSIT_APP)
 
 
@@ -202,7 +203,8 @@ def search():
         response_data = {
             "station_name": station_name_actual,
             "departures": data,
-            "all_stations": stops if len(stops) > 1 else None
+            "all_stations": stops if len(stops) > 1 else None,
+            "matched_stop": stops[0]
         }
         if modified:
             response_data["info"] = "Error searching for exact match, displaying closest match"

@@ -21,6 +21,117 @@ const ANNOUNCEMENT_KEY = 'transit_announcement_text';
 const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
 const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
+// Keep stop matching strict enough to avoid wrong station matches while allowing map/stop coordinate drift.
+const MAP_STOP_MATCH_DISTANCE_METERS = 650;
+let isApplyingUrlState = false;
+
+function parseFiltersSegment(segment) {
+    if (!segment) return {};
+    return segment.split(';').reduce((filters, entry) => {
+        const [rawKey, rawValue = ""] = entry.split('=');
+        const key = rawKey ? rawKey.trim() : "";
+        const value = rawValue.trim();
+        if (key === "line" && value) filters.line = value;
+        if (key === "type" && value) filters.type = value;
+        if (key === "wheelchair") filters.wheelchair = value === "1";
+        return filters;
+    }, {});
+}
+
+function buildFiltersSegment() {
+    const parts = [];
+    const lineFilter = document.getElementById("lineFilter").value.trim();
+    const typeFilter = document.getElementById("typeFilter").value;
+    const wheelchairFilter = document.getElementById("wheelchairFilter").checked;
+
+    if (lineFilter) parts.push(`line=${lineFilter}`);
+    if (typeFilter) parts.push(`type=${typeFilter}`);
+    if (wheelchairFilter) parts.push("wheelchair=1");
+    return parts.join(';');
+}
+
+function setFilterInputs(filters = {}) {
+    document.getElementById("lineFilter").value = filters.line || "";
+    document.getElementById("typeFilter").value = filters.type || "";
+    document.getElementById("wheelchairFilter").checked = !!filters.wheelchair;
+}
+
+function getUrlStateFromPath() {
+    const segments = window.location.pathname.split('/').filter(Boolean);
+    if (!segments.length) {
+        return { mode: "departures" };
+    }
+
+    if (segments[0].toLowerCase() === "map") {
+        return { mode: "map" };
+    }
+
+    const stopIdFromPath = decodeURIComponent(segments[0]);
+    const filters = parseFiltersSegment(decodeURIComponent(segments[1] || ""));
+    return { mode: "station", stopId: stopIdFromPath, filters };
+}
+
+function syncUrlFromState(replace = false) {
+    if (isApplyingUrlState) return;
+
+    let targetPath = "/";
+    if (document.getElementById("mapTab").classList.contains("active")) {
+        targetPath = "/map";
+    } else if (stopId) {
+        const filtersSegment = buildFiltersSegment();
+        targetPath = `/${encodeURIComponent(stopId)}`;
+        if (filtersSegment) {
+            targetPath += `/${encodeURIComponent(filtersSegment)}`;
+        }
+    }
+
+    if (window.location.pathname === targetPath && !replace) return;
+    const stateMethod = replace ? "replaceState" : "pushState";
+    window.history[stateMethod]({}, "", targetPath);
+}
+
+function applyUrlState() {
+    const state = getUrlStateFromPath();
+    isApplyingUrlState = true;
+    try {
+        if (state.mode === "map") {
+            switchTab("map");
+            return;
+        }
+
+        switchTab("departures");
+        if (state.mode === "station" && state.stopId) {
+            setFilterInputs(state.filters);
+            quickSearchById(state.stopId, state.stopId, { resetFilters: false });
+        }
+    } finally {
+        isApplyingUrlState = false;
+    }
+}
+
+function toRadians(value) {
+    return (value * Math.PI) / 180;
+}
+
+function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+    const earthRadiusMeters = 6371000;
+    const dLat = toRadians(lat2 - lat1);
+    const dLon = toRadians(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return earthRadiusMeters * c;
+}
+
+function extractStationCoordinates(station) {
+    if (!station || typeof station !== "object") return null;
+    // Transit API search responses may use lat/lon, latitude/longitude, or nested coord/location objects.
+    const nestedCoords = station.coord ?? station.location ?? {};
+    const lat = Number(station.lat ?? station.latitude ?? nestedCoords.lat);
+    const lon = Number(station.lon ?? station.longitude ?? station.lng ?? nestedCoords.lon ?? nestedCoords.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return { lat, lon };
+}
 
 // ------------------ SEARCH (BY NAME) ------------------
 
@@ -482,7 +593,8 @@ function quickSearch(station) {
 
 // ------------------ QUICK SEARCH (BY ID) ------------------
 
-function quickSearchById(id, displayName) {
+function quickSearchById(id, displayName, options = {}) {
+    const { resetFilters = true } = options;
     stopId = id;
     stopName = displayName;
 
@@ -496,9 +608,11 @@ function quickSearchById(id, displayName) {
     }
 
     // Reset filters when searching a new station
-    document.getElementById("lineFilter").value = "";
-    document.getElementById("typeFilter").value = "";
-    document.getElementById("wheelchairFilter").checked = false;
+    if (resetFilters) {
+        document.getElementById("lineFilter").value = "";
+        document.getElementById("typeFilter").value = "";
+        document.getElementById("wheelchairFilter").checked = false;
+    }
 
     fetchDeparturesById(false, true);
 
@@ -653,6 +767,7 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         countdown = 30;
         updateFavoriteButton();
         updateHomeButton();
+        syncUrlFromState(!isUserSearch);
     } catch (e) {
         console.error(e);
     } finally {
@@ -697,12 +812,14 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
         document.getElementById("stationHeader").innerText =
             result.station_name;
         document.title = `${result.station_name} - Transit Live Departures`;
+        stopName = result.station_name;
 
         lastDepartures = result.departures;
         applyFilter();
         countdown = 30;
         updateFavoriteButton();
         updateHomeButton();
+        syncUrlFromState(!isUserSearch);
     } catch (e) {
         console.error(e);
     } finally {
@@ -804,6 +921,7 @@ function applyFilter() {
     });
 
     populateTable(filtered);
+    syncUrlFromState(true);
 }
 
 // ------------------ TABLE ------------------
@@ -1322,6 +1440,7 @@ function switchTab(tabId) {
     if (tabId === 'map') {
         initMap();
     }
+    syncUrlFromState();
 }
 
 function initMap() {
@@ -1534,7 +1653,7 @@ function wireMapPopupInteractions(container) {
     container.dataset.wired = "true";
 }
 
-async function loadMapPopupDepartures(stationName, popupContent) {
+async function loadMapPopupDepartures(stationName, popupContent, markerCoords = null) {
     const container = popupContent.querySelector(".map-popup-departures");
     if (!container) return;
 
@@ -1558,7 +1677,59 @@ async function loadMapPopupDepartures(stationName, popupContent) {
             throw new Error(result.error || "Failed to load departures.");
         }
 
-        const html = buildMapPopupDeparturesHtml(result.departures);
+        let departuresToRender = result.departures;
+        if (markerCoords && Number.isFinite(markerCoords.lat) && Number.isFinite(markerCoords.lon)) {
+            const nearbyCandidates = [];
+            if (Array.isArray(result.all_stations)) {
+                nearbyCandidates.push(...result.all_stations);
+            }
+            if (result.matched_stop) {
+                nearbyCandidates.push(result.matched_stop);
+            }
+            const uniqueCandidates = Object.values(
+                nearbyCandidates.reduce((acc, station) => {
+                    const key = station?.id || station?.name;
+                    if (key && !acc[key]) acc[key] = station;
+                    return acc;
+                }, {})
+            );
+
+            let nearestStation = null;
+            let nearestDistance = Infinity;
+            uniqueCandidates.forEach((station) => {
+                const coords = extractStationCoordinates(station);
+                if (!coords) return;
+                const distanceMeters = calculateDistanceMeters(
+                    markerCoords.lat,
+                    markerCoords.lon,
+                    coords.lat,
+                    coords.lon
+                );
+                if (distanceMeters < nearestDistance) {
+                    nearestDistance = distanceMeters;
+                    nearestStation = station;
+                }
+            });
+
+            if (!nearestStation || nearestDistance > MAP_STOP_MATCH_DISTANCE_METERS) {
+                container.innerHTML = '<div class="map-popup-empty">No nearby departures found for this stop.</div>';
+                return;
+            }
+
+            const nearestStopId = nearestStation.id;
+            const currentStopId = result.matched_stop?.id;
+            if (nearestStopId && nearestStopId !== currentStopId) {
+                const nearestStationName = nearestStation.name || stationName || stopName || String(nearestStopId);
+                const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
+                const byIdResult = await byIdResponse.json();
+                if (!byIdResponse.ok || byIdResult.error) {
+                    throw new Error(byIdResult.error || `Failed to load departures for nearest stop ${nearestStopId}.`);
+                }
+                departuresToRender = byIdResult.departures || [];
+            }
+        }
+
+        const html = buildMapPopupDeparturesHtml(departuresToRender);
         container.innerHTML = html;
         wireMapPopupInteractions(container);
         MAP_POPUP_CACHE.set(cacheKey, { timestamp: Date.now(), html });
@@ -1686,7 +1857,7 @@ async function updateOverpassMarkers() {
             });
             marker.on('popupopen', () => {
                 openMapPopupName = name;
-                loadMapPopupDepartures(name, popupContent);
+                loadMapPopupDepartures(name, popupContent, { lat: avgLat, lon: avgLon });
             });
             markersLayer.addLayer(marker);
             if (pendingPopupName && pendingPopupName === name) {
@@ -1904,14 +2075,26 @@ window.addEventListener("DOMContentLoaded", function() {
         updateExperimentalUI();
     }
 
-    const home = getHomeStation();
-    if (home) {
-        if (home.id) {
-            quickSearchById(home.id, home.name);
-        } else {
-            quickSearch(home.name);
-        }
+    const urlState = getUrlStateFromPath();
+    if (urlState.mode === "map") {
+        switchTab("map");
+    } else if (urlState.mode === "station" && urlState.stopId) {
+        setFilterInputs(urlState.filters);
+        quickSearchById(urlState.stopId, urlState.stopId, { resetFilters: false });
     } else {
-        quickSearch("Hauptbahnhof Vorplatz");
+        const home = getHomeStation();
+        if (home) {
+            if (home.id) {
+                quickSearchById(home.id, home.name);
+            } else {
+                quickSearch(home.name);
+            }
+        } else {
+            quickSearch("Hauptbahnhof Vorplatz");
+        }
     }
+});
+
+window.addEventListener("popstate", () => {
+    applyUrlState();
 });
