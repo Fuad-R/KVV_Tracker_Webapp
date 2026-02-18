@@ -13,6 +13,17 @@ A Flask-based web application to track real-time departures of the Transit App (
 - **Dark/Light Mode**: Theme support for better visibility.
 - **Dockerized**: Easy deployment using Docker.
 
+## Ranked Feature Ideas (User Need & Impact)
+
+| Rank | Feature Idea | User Need | Why It Matters |
+| --- | --- | --- | --- |
+| 1 | **Service alerts & disruption notifications** | High | Real-time disruption notices prevent missed connections and reduce stress during outages. |
+| 2 | **Departure reminders ("leave now" alerts)** | High | Timely nudges based on walking time help riders catch departures, especially for favorites. |
+| 3 | **Multi-station dashboard** | High | Commuters often monitor multiple nearby stops; a single view saves repeated searches. |
+| 4 | **Accessibility & elevator status** | Medium-High | Critical for mobility-impaired riders to plan viable routes and avoid closed access. |
+| 5 | **Line-specific delay summaries** | Medium | Quick summaries for a favorite line reduce scrolling and improve decision-making. |
+| 6 | **Offline fallback (last known departures)** | Medium | Provides a graceful experience during poor connectivity, common in tunnels or stations. |
+
 ## Prerequisites
 
 - Python 3.11+
