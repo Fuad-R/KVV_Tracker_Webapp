@@ -26,7 +26,6 @@ const MAP_CITY_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAP_CITY_CACHE_PRECISION = 3;
 const MAP_CITY_MIN_REQUEST_INTERVAL_MS = 1000;
 const MAP_CITY_NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse";
-const MAP_CITY_USER_AGENT = "KVV Tracker Webapp (https://github.com/Fuad-R/KVV_Tracker_Webapp)";
 let mapCityLastRequestAt = 0;
 let mapCityRequestChain = Promise.resolve();
 // Keep stop matching strict enough to avoid wrong station matches while allowing map/stop coordinate drift.
@@ -1583,6 +1582,17 @@ function getMapLookupCoordinates(markerCoords) {
     return null;
 }
 
+function getMapCityUserAgent() {
+    const metaTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]')?.content;
+    const appTitle = (metaTitle || document.title || "Transit Tracker Webapp").trim();
+    const origin = window.location?.origin || "https://github.com/Fuad-R/KVV_Tracker_Webapp";
+    return `${appTitle} (${origin})`;
+}
+
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function getCityFromAddress(address = {}) {
     return [
         address.city,
@@ -1621,7 +1631,7 @@ async function resolveMapCityName(lat, lon) {
             const response = await fetch(`${MAP_CITY_NOMINATIM_URL}?${params.toString()}`, {
                 headers: {
                     "Accept": "application/json",
-                    "User-Agent": MAP_CITY_USER_AGENT
+                    "User-Agent": getMapCityUserAgent()
                 }
             });
             if (!response.ok) {
@@ -1641,16 +1651,18 @@ async function resolveMapCityName(lat, lon) {
 
     // Keep requests serialized even when earlier lookups fail.
     const requestPromise = mapCityRequestChain.then(() => requestTask(), () => requestTask());
-    mapCityRequestChain = requestPromise.catch(() => {});
+    mapCityRequestChain = requestPromise.catch((error) => {
+        console.error("Map city lookup queue error:", error);
+    });
     return requestPromise;
 }
 
 function appendCityToStopName(stationName, cityName) {
     const baseName = stationName ? stationName.trim() : "";
     if (!baseName || !cityName) return baseName;
-    const normalizedStation = baseName.toLowerCase();
-    const normalizedCity = cityName.toLowerCase();
-    if (normalizedStation.includes(normalizedCity)) return baseName;
+    const normalizedCity = cityName.trim();
+    const cityPattern = new RegExp(`\\b${escapeRegExp(normalizedCity)}\\b`, "i");
+    if (cityPattern.test(baseName)) return baseName;
     return `${baseName} ${cityName}`.trim();
 }
 
@@ -1806,8 +1818,8 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
     const container = popupContent.querySelector(".map-popup-departures");
     if (!container) return;
 
-    const lookupName = (await buildMapSearchName(stationName, markerCoords)) || stationName || "";
-    const cacheKey = lookupName.toLowerCase();
+    const lookupName = await buildMapSearchName(stationName, markerCoords);
+    const cacheKey = (lookupName || "").toLowerCase();
     const cached = MAP_POPUP_CACHE.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < MAP_POPUP_CACHE_TTL_MS) {
         container.innerHTML = cached.html;
