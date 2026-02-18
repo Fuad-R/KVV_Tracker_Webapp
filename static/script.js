@@ -1591,7 +1591,7 @@ function getMapCityUserAgent() {
     return `${appTitle} (${origin})`;
 }
 
-function escapeRegExpSpecialChars(value) {
+function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
@@ -1655,7 +1655,7 @@ async function resolveMapCityName(lat, lon) {
     // Keep requests serialized even when earlier lookups fail.
     const requestPromise = mapCityRequestChain.then(
         () => requestTask(),
-        () => requestTask() // Run request task even if prior lookup failed
+        () => requestTask()
     );
     mapCityRequestChain = requestPromise.catch((error) => {
         console.error("Map city lookup queue error:", error);
@@ -1668,11 +1668,12 @@ function appendCityToStopName(stationName, cityName) {
     const baseName = stationName ? stationName.trim() : "";
     if (!baseName || !cityName) return baseName;
     const normalizedCity = cityName.trim();
-    const cityPattern = new RegExp(`\\b${escapeRegExpSpecialChars(normalizedCity)}\\b`, "i");
+    const cityPattern = new RegExp(`\\b${escapeRegex(normalizedCity)}\\b`, "i");
     if (cityPattern.test(baseName)) return baseName;
     return `${baseName} ${cityName}`.trim();
 }
 
+// Populate the city input when empty to preserve manual overrides.
 function applyMapCityInput(cityName) {
     if (!cityName) return;
     const cityInput = document.getElementById("cityInput");
@@ -1681,6 +1682,7 @@ function applyMapCityInput(cityName) {
     }
 }
 
+// Build a station lookup name with city context for map-driven searches.
 async function resolveMapSearchContext(stationName, markerCoords = null) {
     const baseName = stationName ? stationName.trim() : "";
     if (!baseName) return { lookupName: baseName, cityName: "" };
