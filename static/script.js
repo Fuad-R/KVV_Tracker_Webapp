@@ -444,11 +444,9 @@ function searchStop() {
     }
     stopName = inputName;
 
-    const city = document.getElementById("cityInput").value.trim() || "Karlsruhe";
-
     // Track search event
     if (typeof umami !== 'undefined') {
-        umami.track('station-search', { method: 'by-name', station: inputName, city: city });
+        umami.track('station-search', { method: 'by-name', station: inputName });
     }
 
     // Reset filters when searching a new station
@@ -590,8 +588,7 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
             lookupName = lookupName.split('/')[0].trim();
         }
 
-        const city = document.getElementById("cityInput").value.trim() || "Karlsruhe";
-        const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}&city=${encodeURIComponent(city)}`);
+        const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`);
         const result = await res.json();
 
         if (res.status === 404) {
@@ -684,8 +681,7 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     }
 
     try {
-        const city = document.getElementById("cityInput").value.trim() || "Karlsruhe";
-        const res = await fetch(`/search_by_id?stop_id=${stopId}&station_name=${encodeURIComponent(stopName)}&city=${encodeURIComponent(city)}`);
+        const res = await fetch(`/search_by_id?stop_id=${stopId}&station_name=${encodeURIComponent(stopName)}`);
         const result = await res.json();
 
         if (result.error) {

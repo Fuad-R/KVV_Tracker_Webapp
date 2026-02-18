@@ -16,14 +16,19 @@ app = Flask(__name__)
 
 # ---------------- API ----------------
 
+def extract_search_locations(payload):
+    """Normalize stop search payloads to location entries (or [] for unknown payloads)."""
+    if isinstance(payload, dict):
+        return payload.get("locations", [])
+    return payload if isinstance(payload, list) else []
 
 def get_stop_id(stop_name: str):
     r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name}, timeout=10)
     r.raise_for_status()
-    data = r.json()
-    if not data:
+    stops = extract_search_locations(r.json())
+    if not stops:
         return None
-    return data[0].get("id")
+    return stops[0].get("id")
 
 def get_stop_departures(stop_id: str):
     r = requests.get(f"{BASE_URL}/stops/{stop_id}", params={"detailed": "1", "delay": "1"}, timeout=10)
@@ -94,8 +99,7 @@ def serve_manifest():
 @app.route("/search")
 def search():
     stop_name = request.args.get("stop")
-    city = request.args.get("city", "Karlsruhe") or "Karlsruhe"
-    
+
     if not stop_name:
         return jsonify({"error": "Stop name required"}), 400
 
@@ -109,10 +113,9 @@ def search():
         while len(current_query) >= 3:
             stop_name_api = current_query.replace(" ", "_")
             # Pull all matching stops from the API
-            params = {"q": stop_name_api, "city": city}
-            r = requests.get(f"{BASE_URL}/stops/search", params=params, timeout=10)
+            r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name_api}, timeout=10)
             r.raise_for_status()
-            stops = r.json()
+            stops = extract_search_locations(r.json())
             
             if stops:
                 break
@@ -214,7 +217,6 @@ def search():
 def search_by_id():
     stop_id = request.args.get("stop_id")
     station_name = request.args.get("station_name")
-    city = request.args.get("city", "Karlsruhe") or "Karlsruhe"
 
     if not stop_id:
         return jsonify({"error": "Stop ID required"}), 400
