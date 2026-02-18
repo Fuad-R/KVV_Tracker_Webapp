@@ -1,11 +1,14 @@
 from flask import Flask, render_template, jsonify, request
 import requests
 from datetime import datetime, timedelta
+import math
 
 BASE_URL = "https://kvvapi.fuadserver.uk/api"
 MAX_MINUTES = 30
+MIN_DISTANCE_THRESHOLD_M = 500
+MAX_DISTANCE_THRESHOLD_M = 700
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="Templates")
 
 # ---------------- API ----------------
 
@@ -19,6 +22,27 @@ def get_stop_departures(stop_id: str):
     r = requests.get(f"{BASE_URL}/stops/{stop_id}", timeout=10)
     r.raise_for_status()
     return r.json()
+
+def extract_coordinates(data):
+    if isinstance(data, dict):
+        lat_keys = ["lat", "latitude", "stop_lat", "stop_latitude"]
+        lon_keys = ["lon", "lng", "longitude", "stop_lon", "stop_longitude"]
+        lat = next((data.get(k) for k in lat_keys if data.get(k) is not None), None)
+        lon = next((data.get(k) for k in lon_keys if data.get(k) is not None), None)
+        if lat is not None and lon is not None:
+            return float(lat), float(lon)
+    return None, None
+
+def haversine_meters(lat1, lon1, lat2, lon2):
+    radius = 6371000
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return radius * c
 
 # ---------------- LINE COLORS ----------------
 
@@ -40,6 +64,15 @@ def line_color(line: str) -> str:
 
 @app.route("/")
 def index():
+    return render_template("index.html")
+
+@app.route("/map")
+def map_mode():
+    return render_template("index.html")
+
+@app.route("/<stop_id>")
+@app.route("/<stop_id>/<filters>")
+def station(stop_id, filters=None):
     return render_template("index.html")
 
 
@@ -79,7 +112,8 @@ def search():
         # Return station name from API
         return jsonify({
             "station_name": station_name_actual,
-            "departures": data
+            "departures": data,
+            "stop_id": stop_id
         })
 
     except Exception as e:
@@ -93,6 +127,26 @@ def search_by_id():
 
     try:
         data = get_stop_departures(stop_id)
+        lat = request.args.get("lat", type=float)
+        lon = request.args.get("lon", type=float)
+        max_distance_m = request.args.get("max_distance_m", default=600, type=float)
+        max_distance_m = max(MIN_DISTANCE_THRESHOLD_M, min(MAX_DISTANCE_THRESHOLD_M, max_distance_m))
+
+        if lat is not None and lon is not None:
+            if not isinstance(data, list) or not data:
+                return jsonify({"error": "Stop data unavailable for distance check"}), 422
+
+            stop_lat, stop_lon = extract_coordinates(data[0])
+            if stop_lat is None or stop_lon is None:
+                return jsonify({"error": "Stop coordinates unavailable for distance check"}), 422
+
+            distance = haversine_meters(lat, lon, stop_lat, stop_lon)
+            if distance > max_distance_m:
+                return jsonify({
+                    "error": "Selected map location is too far from stop",
+                    "distance_m": round(distance, 2),
+                    "max_distance_m": max_distance_m
+                }), 400
 
         station_name = data[0].get("stop_name", "Unknown station") if data else "Unknown station"
 
@@ -106,7 +160,8 @@ def search_by_id():
 
         return jsonify({
             "station_name": station_name,
-            "departures": data
+            "departures": data,
+            "stop_id": stop_id
         })
 
     except Exception as e:

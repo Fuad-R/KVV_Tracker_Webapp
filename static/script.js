@@ -4,10 +4,78 @@ let countdown = 30;
 let countdownInterval;
 let refreshInterval;
 let lastDepartures = []; // store last fetched departures for filtering
+let mapMode = false;
+
+function serializeFilters() {
+    const parts = [];
+    const line = document.getElementById("lineFilter").value.trim();
+    const type = document.getElementById("typeFilter").value;
+    const accessible = document.getElementById("accessibilityFilter").value;
+
+    if (line) parts.push(`line=${encodeURIComponent(line)}`);
+    if (type) parts.push(`type=${encodeURIComponent(type)}`);
+    if (accessible) parts.push(`accessible=${encodeURIComponent(accessible)}`);
+    return parts.join(",");
+}
+
+function applyFiltersFromPath(filters) {
+    const values = {};
+    if (filters) {
+        filters.split(",").forEach(part => {
+            const [key, value] = part.split("=");
+            if (key && value) values[key] = decodeURIComponent(value);
+        });
+    }
+    document.getElementById("lineFilter").value = values.line || "";
+    document.getElementById("typeFilter").value = values.type || "";
+    document.getElementById("accessibilityFilter").value = values.accessible || "";
+}
+
+function updateUrlFromState() {
+    let nextPath = "/";
+    if (mapMode) nextPath = "/map";
+    else if (stopId) {
+        const filters = serializeFilters();
+        nextPath = `/${encodeURIComponent(stopId)}${filters ? `/${filters}` : ""}`;
+    }
+    if (window.location.pathname !== nextPath) {
+        window.history.pushState({}, "", nextPath);
+    }
+}
+
+function setMapMode(enabled) {
+    mapMode = enabled;
+    if (enabled) {
+        stopId = null;
+        stopName = "";
+        document.getElementById("stationHeader").innerText = "Map mode";
+    }
+    updateUrlFromState();
+}
+
+function readAccessible(departure) {
+    const candidates = [
+        departure.wheelchair_accessible,
+        departure.is_barrier_free,
+        departure.barrier_free,
+        departure.accessible,
+        departure.disabled_access
+    ];
+    const value = candidates.find(v => v !== undefined && v !== null);
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    if (typeof value === "string") {
+        const normalized = value.toLowerCase();
+        if (["true", "yes", "1"].includes(normalized)) return true;
+        if (["false", "no", "0"].includes(normalized)) return false;
+    }
+    return null;
+}
 
 // ------------------ SEARCH (BY NAME) ------------------
 
 function searchStop() {
+    setMapMode(false);
     stopId = null; // reset ID-based search
 
     stopName = document.getElementById("stopInput").value.trim();
@@ -33,6 +101,7 @@ function quickSearch(station) {
 // ------------------ QUICK SEARCH (BY ID) ------------------
 
 function quickSearchById(id, displayName) {
+    setMapMode(false);
     stopId = id;
     stopName = displayName;
 
@@ -72,9 +141,12 @@ async function fetchDepartures() {
 
         document.getElementById("stationHeader").innerText =
             result.station_name;
+        stopName = result.station_name || stopName;
+        stopId = result.stop_id || stopId;
 
         lastDepartures = result.departures;
-        populateTable(result.departures);
+        applyFilter();
+        updateUrlFromState();
         countdown = 30;
     } catch (e) {
         console.error(e);
@@ -95,9 +167,12 @@ async function fetchDeparturesById() {
 
         document.getElementById("stationHeader").innerText =
             result.station_name;
+        stopName = result.station_name || stopName;
+        stopId = result.stop_id || stopId;
 
         lastDepartures = result.departures;
-        populateTable(result.departures);
+        applyFilter();
+        updateUrlFromState();
         countdown = 30;
     } catch (e) {
         console.error(e);
@@ -145,10 +220,12 @@ function getLineIcon(line) {
 function applyFilter() {
     const lineFilter = document.getElementById("lineFilter").value.trim();
     const typeFilter = document.getElementById("typeFilter").value;
+    const accessibilityFilter = document.getElementById("accessibilityFilter").value;
 
     const filtered = lastDepartures.filter(d => {
         let lineMatch = true;
         let typeMatch = true;
+        let accessibilityMatch = true;
 
         // Line filter
         if (lineFilter) {
@@ -171,10 +248,17 @@ function applyFilter() {
                 typeMatch = !isSbahn && lineNumber >= 10;
         }
 
-        return lineMatch && typeMatch;
+        if (accessibilityFilter) {
+            const isAccessible = readAccessible(d);
+            if (accessibilityFilter === "yes") accessibilityMatch = isAccessible === true;
+            if (accessibilityFilter === "no") accessibilityMatch = isAccessible === false;
+        }
+
+        return lineMatch && typeMatch && accessibilityMatch;
     });
 
     populateTable(filtered);
+    updateUrlFromState();
 }
 
 // ------------------ TABLE ------------------
@@ -278,3 +362,25 @@ document.getElementById("stopInput").addEventListener("keypress", function(event
         searchStop();
     }
 });
+
+(function initFromUrl() {
+    const path = window.location.pathname.replace(/^\/+|\/+$/g, "");
+    if (!path) return;
+
+    if (path === "map") {
+        setMapMode(true);
+        return;
+    }
+
+    const parts = path.split("/");
+    if (parts.length >= 1) {
+        stopId = decodeURIComponent(parts[0]);
+        if (parts[1]) applyFiltersFromPath(parts[1]);
+        fetchDeparturesById();
+        if (refreshInterval) clearInterval(refreshInterval);
+        if (countdownInterval) clearInterval(countdownInterval);
+        countdown = 30;
+        countdownInterval = setInterval(updateCountdown, 1000);
+        refreshInterval = setInterval(fetchDeparturesById, 30000);
+    }
+})();
