@@ -1,11 +1,13 @@
 from flask import Flask, render_template, jsonify, request
+import os
 import requests
 from datetime import datetime, timedelta
 
 TRANSIT_APP = "Transit App"
 
 #balls
-BASE_URL = "https://transitapi.fuadserver.uk/api"
+DEV_MODE = (os.getenv("dev") or os.getenv("DEV") or "false").strip().lower() == "true"
+BASE_URL = "https://transitapi-dev.fuadserver.uk/api" if DEV_MODE else "https://transitapi.fuadserver.uk/api"
 MAX_MINUTES = 30
 
 DEBUG_PASSWORD = "fuadsux"
@@ -81,8 +83,9 @@ def line_color(mot: int, line: str) -> str:
 
 
 # ---------------- ROUTES ----------------
-@app.route("/")
-def index():
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def index(path):
     return render_template("index.html", app_name=TRANSIT_APP)
 
 
@@ -202,7 +205,8 @@ def search():
         response_data = {
             "station_name": station_name_actual,
             "departures": data,
-            "all_stations": stops if len(stops) > 1 else None
+            "all_stations": stops if len(stops) > 1 else None,
+            "matched_stop": stops[0]
         }
         if modified:
             response_data["info"] = "Error searching for exact match, displaying closest match"
