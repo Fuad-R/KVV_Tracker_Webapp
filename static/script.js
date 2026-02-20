@@ -1892,6 +1892,9 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
             departuresToRender = byIdResult.departures || [];
         } else {
             const fallbackName = lookupName || stationName || "";
+            if (!fallbackName) {
+                throw new Error("Stop name required.");
+            }
             const res = await fetch(`/search?stop=${encodeURIComponent(fallbackName)}`);
             const result = await res.json();
             if (!res.ok || result.error) {

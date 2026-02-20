@@ -53,7 +53,7 @@ def load_db_connection_config(path: str = DB_CONNECTION_PATH):
                 continue
             key, value = stripped.split("=", 1)
             config[key.strip()] = value.strip()
-    return config or None
+    return config
 
 def get_db_connection():
     config = load_db_connection_config()
