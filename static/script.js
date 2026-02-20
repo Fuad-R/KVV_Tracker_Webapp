@@ -1724,7 +1724,7 @@ async function lookupStopByCoords(lat, lon) {
             throw new Error("Stop lookup timed out.");
         }
         if (error instanceof TypeError) {
-            throw new Error(`Network error while contacting stop lookup service: ${error.message}`);
+            throw new Error(`Network error while contacting the server: ${error.message}`);
         }
         throw error;
     } finally {
@@ -1893,7 +1893,7 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
             const lookupResult = await lookupStopByCoords(markerCoords.lat, markerCoords.lon);
             const nearestStopId = lookupResult.stop_id;
             if (!nearestStopId) {
-                throw new Error("Stop lookup did not return an ID.");
+                throw new Error("No stop found at this location.");
             }
             const nearestStationName = lookupResult.stop_name || stationName || lookupName || String(nearestStopId);
             const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
@@ -2081,7 +2081,7 @@ async function selectStationFromMap(name, lat, lon) {
         const lookupResult = await lookupStopByCoords(lat, lon);
         const resolvedStopId = lookupResult.stop_id;
         if (!resolvedStopId) {
-            throw new Error("Stop lookup did not return an ID.");
+            throw new Error("No stop found at this location.");
         }
         const resolvedName = lookupResult.stop_name || lookupName || name || String(resolvedStopId);
         quickSearchById(resolvedStopId, resolvedName);

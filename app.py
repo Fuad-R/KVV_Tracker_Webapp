@@ -11,7 +11,7 @@ TRANSIT_APP = "Transit App"
 DEV_MODE = (os.getenv("dev") or os.getenv("DEV") or "false").strip().lower() == "true"
 BASE_URL = "https://transitapi-dev.fuadserver.uk/api" if DEV_MODE else "https://transitapi.fuadserver.uk/api"
 MAX_MINUTES = 30
-# Map stop lookup radius per requirements (300m).
+# Map stop lookup radius (300m) to match map selection requirements.
 MAP_STOP_SEARCH_RADIUS_METERS = 300
 DB_CONNECTION_PATH = "/config/db_connection.txt"
 REQUIRED_DB_SETTINGS = {"host", "port", "dbname", "user", "password"}
