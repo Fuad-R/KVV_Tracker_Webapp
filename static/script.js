@@ -1,8 +1,9 @@
 let stopName = "";
 let stopId = null;
+const DEBUG_PASSWORD_KEY = "debugPassword";
 const appConfig = window.APP_CONFIG || {};
 const devModeEnabled = appConfig.devMode === true;
-const storedDebugPassword = localStorage.getItem("debugPassword") || "";
+const storedDebugPassword = localStorage.getItem(DEBUG_PASSWORD_KEY) || "";
 const defaultDebugPassword = typeof appConfig.debugPassword === "string" ? appConfig.debugPassword : "";
 let debugPassword = storedDebugPassword;
 if (devModeEnabled) {
@@ -31,6 +32,7 @@ const APP_STORAGE_KEYS = [
     HOME_STATION_KEY,
     EXPERIMENTAL_KEY,
     DEV_LOCATION_KEY,
+    DEBUG_PASSWORD_KEY,
     ANNOUNCEMENT_KEY,
     ANNOUNCEMENT_SETTINGS_KEY
 ];
@@ -244,7 +246,7 @@ async function loginDebug() {
     if (data.success) {
         debugMode = true;
         debugPassword = password;
-        localStorage.setItem("debugPassword", password);
+        localStorage.setItem(DEBUG_PASSWORD_KEY, password);
         closeDebugLogin();
         enableDebugUI();
         applyFilter(); // Re-render to show edit buttons
@@ -274,7 +276,7 @@ function logoutDebug() {
 
     debugMode = false;
     debugPassword = "";
-    localStorage.removeItem("debugPassword");
+    localStorage.removeItem(DEBUG_PASSWORD_KEY);
 
     // Track debug mode logout
     if (typeof umami !== 'undefined') {
