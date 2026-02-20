@@ -68,10 +68,10 @@ def get_db_connection():
 
 def find_nearest_stop(lat: float, lon: float, max_distance_meters: int = MAP_STOP_SEARCH_RADIUS_METERS):
     query = """
-        SELECT stop_id, stop_name, ST_Distance(location::geography, ref_point) AS distance
+        SELECT stop_id, stop_name, ST_Distance(location, ref_point) AS distance
         FROM stops,
              (SELECT ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326)::geography AS ref_point) AS reference
-        WHERE ST_DWithin(location::geography, ref_point, %(max_distance)s)
+        WHERE location IS NOT NULL AND ST_DWithin(location, ref_point, %(max_distance)s)
         ORDER BY distance ASC
         LIMIT 1;
     """
