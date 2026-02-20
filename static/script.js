@@ -284,7 +284,7 @@ async function loginDebug() {
 
 function logoutDebug() {
     if (devModeEnabled) {
-        showError("Dev mode is enabled via server configuration. Contact an administrator to disable it.");
+        showError("Dev mode is enabled via environment variable. Set DEV=false or restart without DEV to disable it.");
         return;
     }
 
@@ -368,6 +368,8 @@ function resetAppData() {
     if (!debugMode) return;
     if (!confirm("Reset saved app data (including any stored debug password)?")) return;
     APP_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+    debugPassword = "";
+    debugMode = devModeEnabled;
     if (typeof umami !== 'undefined') {
         umami.track('debug-reset-app-data');
     }
