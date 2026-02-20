@@ -33,8 +33,6 @@ const MAP_CITY_NOMINATIM_URL = (typeof window !== "undefined" && window.NOMINATI
 let mapCityLastRequestAt = 0;
 let mapCityFailureCount = 0;
 let mapCityRequestChain = Promise.resolve();
-// Keep stop matching strict enough to avoid wrong station matches while allowing map/stop coordinate drift.
-const MAP_STOP_MATCH_DISTANCE_METERS = 650;
 let isApplyingUrlState = false;
 
 function parseFiltersSegment(segment) {
@@ -1709,6 +1707,15 @@ async function resolveMapSearchContext(stationName, markerCoords = null) {
     return { lookupName: appendCityToStopName(baseName, cityName), cityName };
 }
 
+async function lookupStopByCoords(lat, lon) {
+    const res = await fetch(`/lookup_stop_by_coords?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`);
+    const result = await res.json();
+    if (!res.ok || result.error) {
+        throw new Error(result.error || "Failed to find nearby stop.");
+    }
+    return result;
+}
+
 function buildMapPopupDeparturesHtml(departures) {
     if (!departures || departures.length === 0) {
         return '<div class="map-popup-empty">No departures found.</div>';
@@ -1848,7 +1855,7 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
 
     const { lookupName, cityName } = await resolveMapSearchContext(stationName, markerCoords);
     applyMapCityInput(cityName);
-    const cacheKey = (lookupName || "").toLowerCase();
+    const cacheKey = (lookupName || stationName || "").toLowerCase();
     const cached = MAP_POPUP_CACHE.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < MAP_POPUP_CACHE_TTL_MS) {
         container.innerHTML = cached.html;
@@ -1862,59 +1869,25 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
     container.innerHTML = '<div class="map-popup-loading">Loading departures...</div>';
 
     try {
-        const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`);
-        const result = await res.json();
-        if (!res.ok || result.error) {
-            throw new Error(result.error || "Failed to load departures.");
-        }
-
-        let departuresToRender = result.departures;
+        let departuresToRender = [];
         if (markerCoords && Number.isFinite(markerCoords.lat) && Number.isFinite(markerCoords.lon)) {
-            const nearbyCandidates = [];
-            if (Array.isArray(result.all_stations)) {
-                nearbyCandidates.push(...result.all_stations);
+            const lookupResult = await lookupStopByCoords(markerCoords.lat, markerCoords.lon);
+            const nearestStopId = lookupResult.stop_id;
+            const nearestStationName = lookupResult.stop_name || stationName || lookupName || stopName || String(nearestStopId);
+            const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
+            const byIdResult = await byIdResponse.json();
+            if (!byIdResponse.ok || byIdResult.error) {
+                throw new Error(byIdResult.error || `Failed to load departures for stop ${nearestStopId}.`);
             }
-            if (result.matched_stop) {
-                nearbyCandidates.push(result.matched_stop);
+            departuresToRender = byIdResult.departures || [];
+        } else {
+            const fallbackName = lookupName || stationName || "";
+            const res = await fetch(`/search?stop=${encodeURIComponent(fallbackName)}`);
+            const result = await res.json();
+            if (!res.ok || result.error) {
+                throw new Error(result.error || "Failed to load departures.");
             }
-            const uniqueCandidates = Object.values(
-                nearbyCandidates.reduce((acc, station) => {
-                    const key = station?.id || station?.name;
-                    if (key && !acc[key]) acc[key] = station;
-                    return acc;
-                }, {})
-            );
-
-            let nearestStation = null;
-            let nearestDistance = Infinity;
-            uniqueCandidates.forEach((station) => {
-                const coords = extractStationCoordinates(station);
-                if (!coords) return;
-                const distanceMeters = calculateDistanceMeters(
-                    markerCoords.lat,
-                    markerCoords.lon,
-                    coords.lat,
-                    coords.lon
-                );
-                if (distanceMeters < nearestDistance) {
-                    nearestDistance = distanceMeters;
-                    nearestStation = station;
-                }
-            });
-
-            if (nearestStation && nearestDistance <= MAP_STOP_MATCH_DISTANCE_METERS) {
-                const nearestStopId = nearestStation.id;
-                const currentStopId = result.matched_stop?.id;
-                if (nearestStopId && nearestStopId !== currentStopId) {
-                    const nearestStationName = nearestStation.name || stationName || stopName || String(nearestStopId);
-                    const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
-                    const byIdResult = await byIdResponse.json();
-                    if (!byIdResponse.ok || byIdResult.error) {
-                        throw new Error(byIdResult.error || `Failed to load departures for nearest stop ${nearestStopId}.`);
-                    }
-                    departuresToRender = byIdResult.departures || [];
-                }
-            }
+            departuresToRender = result.departures || [];
         }
 
         const html = buildMapPopupDeparturesHtml(departuresToRender);
@@ -2079,9 +2052,14 @@ async function selectStationFromMap(name, lat, lon) {
     switchTab('departures');
     const { lookupName, cityName } = await resolveMapSearchContext(name, { lat, lon });
     applyMapCityInput(cityName);
-    document.getElementById('stopInput').value = lookupName || name;
-    toggleClearButton();
-    searchStop();
+    try {
+        const lookupResult = await lookupStopByCoords(lat, lon);
+        const resolvedName = lookupResult.stop_name || lookupName || name || String(lookupResult.stop_id);
+        quickSearchById(lookupResult.stop_id, resolvedName);
+    } catch (error) {
+        console.error("Error selecting map stop:", error);
+        showError("No nearby stop found for this map location.");
+    }
 }
 
 function locateUser() {
