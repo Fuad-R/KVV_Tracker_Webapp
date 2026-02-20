@@ -1,7 +1,11 @@
 let stopName = "";
 let stopId = null;
-let debugMode = false;
-let debugPassword = localStorage.getItem("debugPassword") || "";
+const appConfig = window.APP_CONFIG || {};
+const devModeEnabled = appConfig.devMode === true;
+const storedDebugPassword = localStorage.getItem("debugPassword") || "";
+const defaultDebugPassword = typeof appConfig.debugPassword === "string" ? appConfig.debugPassword : "";
+let debugPassword = devModeEnabled ? (defaultDebugPassword || storedDebugPassword) : storedDebugPassword;
+let debugMode = devModeEnabled || !!debugPassword;
 let countdown = 30;
 let countdownInterval;
 let refreshInterval;
@@ -206,8 +210,12 @@ async function loginDebug() {
         if (updateBtn) updateBtn.style.display = "block";
         const pauseBtn = document.getElementById("pauseUpdatesBtn");
         if (pauseBtn) pauseBtn.style.display = "block";
+        const clearOverridesBtn = document.getElementById("clearOverridesBtn");
+        if (clearOverridesBtn) clearOverridesBtn.style.display = "block";
+        const resetAppDataBtn = document.getElementById("resetAppDataBtn");
+        if (resetAppDataBtn) resetAppDataBtn.style.display = "block";
         const leaveBtn = document.getElementById("leaveDebugBtn");
-        if (leaveBtn) leaveBtn.style.display = "block";
+        if (leaveBtn) leaveBtn.style.display = devModeEnabled ? "none" : "block";
         const devLocationBtn = document.getElementById("devLocationBtn");
         if (devLocationBtn) devLocationBtn.style.display = "block";
 
@@ -240,6 +248,11 @@ async function loginDebug() {
 }
 
 function logoutDebug() {
+    if (devModeEnabled) {
+        showError("Dev mode is enabled by configuration.");
+        return;
+    }
+
     debugMode = false;
     debugPassword = "";
     localStorage.removeItem("debugPassword");
@@ -254,6 +267,10 @@ function logoutDebug() {
     if (updateBtn) updateBtn.style.display = "none";
     const pauseBtn = document.getElementById("pauseUpdatesBtn");
     if (pauseBtn) pauseBtn.style.display = "none";
+    const clearOverridesBtn = document.getElementById("clearOverridesBtn");
+    if (clearOverridesBtn) clearOverridesBtn.style.display = "none";
+    const resetAppDataBtn = document.getElementById("resetAppDataBtn");
+    if (resetAppDataBtn) resetAppDataBtn.style.display = "none";
     const leaveBtn = document.getElementById("leaveDebugBtn");
     if (leaveBtn) leaveBtn.style.display = "none";
     const devLocationBtn = document.getElementById("devLocationBtn");
@@ -281,6 +298,46 @@ function logoutDebug() {
 
     // Re-render departures to remove edit buttons
     applyFilter();
+}
+
+async function clearDebugOverrides() {
+    if (!debugMode) return;
+    if (!debugPassword) {
+        showError("Debug password not set.");
+        return;
+    }
+    if (!confirm("Clear all debug overrides?")) return;
+    try {
+        const res = await fetch("/debug/clear", {
+            method: "POST",
+            headers: {
+                "X-Debug-Password": debugPassword
+            }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            showError(data.error || "Failed to clear overrides.");
+            return;
+        }
+        updateNow();
+        if (typeof umami !== 'undefined') {
+            umami.track('debug-clear-overrides');
+        }
+    } catch (e) {
+        console.error(e);
+        showError("Failed to clear overrides.");
+    }
+}
+
+function resetAppData() {
+    if (!debugMode) return;
+    if (!confirm("Reset saved app data?")) return;
+    [FAVORITES_KEY, HOME_STATION_KEY, EXPERIMENTAL_KEY, DEV_LOCATION_KEY, ANNOUNCEMENT_KEY, ANNOUNCEMENT_SETTINGS_KEY]
+        .forEach((key) => localStorage.removeItem(key));
+    if (typeof umami !== 'undefined') {
+        umami.track('debug-reset-app-data');
+    }
+    window.location.reload();
 }
 
 function editAnnouncement() {
@@ -2265,8 +2322,12 @@ window.addEventListener("DOMContentLoaded", function() {
         if (updateBtn) updateBtn.style.display = "block";
         const pauseBtn = document.getElementById("pauseUpdatesBtn");
         if (pauseBtn) pauseBtn.style.display = "block";
+        const clearOverridesBtn = document.getElementById("clearOverridesBtn");
+        if (clearOverridesBtn) clearOverridesBtn.style.display = "block";
+        const resetAppDataBtn = document.getElementById("resetAppDataBtn");
+        if (resetAppDataBtn) resetAppDataBtn.style.display = "block";
         const leaveBtn = document.getElementById("leaveDebugBtn");
-        if (leaveBtn) leaveBtn.style.display = "block";
+        if (leaveBtn) leaveBtn.style.display = devModeEnabled ? "none" : "block";
         const devLocationBtn = document.getElementById("devLocationBtn");
         if (devLocationBtn) devLocationBtn.style.display = "block";
 
@@ -2275,6 +2336,8 @@ window.addEventListener("DOMContentLoaded", function() {
         if (announcementBar) announcementBar.style.display = "flex";
         const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
         if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
+        const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
+        if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
 
         updateExperimentalUI();
     }

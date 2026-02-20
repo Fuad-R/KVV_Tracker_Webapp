@@ -79,7 +79,9 @@ Type the name of a station in the search bar to get real-time departures.
 To enter debug mode:
 1. Type `test-dev-debug` into the station search bar.
 2. Enter the debug password (default: `fuadsux`).
-3. In debug mode, you can override departure times and delays, pause updates, and access a map view.
+3. In debug mode, you can override departure times and delays, pause updates, clear overrides, reset saved app data, and access a map view.
+
+To enable dev mode automatically (including Flask debug and UI debug tools), set `DEV=true` (or `dev=true`) in the environment. Leave it unset/false in production to keep debug tools off by default.
 
 ## Project Structure
 

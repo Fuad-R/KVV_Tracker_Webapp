@@ -132,7 +132,12 @@ def line_color(mot: int, line: str) -> str:
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def index(path):
-    return render_template("index.html", app_name=TRANSIT_APP)
+    return render_template(
+        "index.html",
+        app_name=TRANSIT_APP,
+        dev_mode=DEV_MODE,
+        debug_password=DEBUG_PASSWORD if DEV_MODE else None,
+    )
 
 
 @app.route("/sw.js")
@@ -434,4 +439,4 @@ def debug_clear():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=DEV_MODE)
