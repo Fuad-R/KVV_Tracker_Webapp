@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 TRANSIT_APP = "Transit App"
 
 #balls
-DEV_MODE = os.getenv("dev", "false").strip().lower() == "true"
+DEV_MODE = (os.getenv("dev") or "false").strip().lower() == "true"
 BASE_URL = "https://transitapi-dev.fuadserver.uk/api" if DEV_MODE else "https://transitapi.fuadserver.uk/api"
 MAX_MINUTES = 30
 
