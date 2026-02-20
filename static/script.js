@@ -208,7 +208,20 @@ function canLeaveDevMode() {
 function getDebugAuthHeader() {
     if (devModeEnabled) return "dev-mode";
     if (debugPassword) return debugPassword;
-    return "";
+    return null;
+}
+
+function withDebugAuthHeaders(headers = {}) {
+    const authHeader = getDebugAuthHeader();
+    if (authHeader) {
+        headers["X-Debug-Password"] = authHeader;
+    }
+    return headers;
+}
+
+function setLeaveDebugButtonVisible(isVisible) {
+    const leaveBtn = document.getElementById("leaveDebugBtn");
+    if (leaveBtn) leaveBtn.style.display = isVisible ? "block" : "none";
 }
 
 function enableDebugUI() {
@@ -220,8 +233,7 @@ function enableDebugUI() {
     if (clearOverridesBtn) clearOverridesBtn.style.display = "block";
     const resetAppDataBtn = document.getElementById("resetAppDataBtn");
     if (resetAppDataBtn) resetAppDataBtn.style.display = "block";
-    const leaveBtn = document.getElementById("leaveDebugBtn");
-    if (leaveBtn) leaveBtn.style.display = canLeaveDevMode() ? "block" : "none";
+    setLeaveDebugButtonVisible(canLeaveDevMode());
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "block";
 
@@ -294,8 +306,7 @@ function logoutDebug() {
     if (clearOverridesBtn) clearOverridesBtn.style.display = "none";
     const resetAppDataBtn = document.getElementById("resetAppDataBtn");
     if (resetAppDataBtn) resetAppDataBtn.style.display = "none";
-    const leaveBtn = document.getElementById("leaveDebugBtn");
-    if (leaveBtn) leaveBtn.style.display = "none";
+    setLeaveDebugButtonVisible(false);
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "none";
 
@@ -325,7 +336,8 @@ function logoutDebug() {
 
 async function clearDebugOverrides() {
     if (!debugMode) return;
-    if (!getDebugAuthHeader()) {
+    const authHeader = getDebugAuthHeader();
+    if (!authHeader) {
         showError("Debug authentication not available.");
         return;
     }
@@ -334,7 +346,7 @@ async function clearDebugOverrides() {
         const res = await fetch("/debug/clear", {
             method: "POST",
             headers: {
-                "X-Debug-Password": getDebugAuthHeader()
+                "X-Debug-Password": authHeader
             }
         });
         const data = await res.json();
@@ -354,7 +366,7 @@ async function clearDebugOverrides() {
 
 function resetAppData() {
     if (!debugMode) return;
-    if (!confirm("Reset saved app data?")) return;
+    if (!confirm("Reset saved app data (including any stored debug password)?")) return;
     APP_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
     if (typeof umami !== 'undefined') {
         umami.track('debug-reset-app-data');
@@ -602,10 +614,9 @@ async function saveDebugOverride() {
     try {
         const res = await fetch("/debug/update", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Debug-Password": getDebugAuthHeader()
-            },
+            headers: withDebugAuthHeaders({
+                "Content-Type": "application/json"
+            }),
             body: JSON.stringify({
                 stop_id,
                 line,
@@ -639,10 +650,9 @@ async function clearDebugOverride() {
     try {
         const res = await fetch("/debug/update", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Debug-Password": getDebugAuthHeader()
-            },
+            headers: withDebugAuthHeaders({
+                "Content-Type": "application/json"
+            }),
             body: JSON.stringify({
                 stop_id,
                 line,
