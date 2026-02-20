@@ -204,7 +204,7 @@ function closeDebugLogin() {
     document.getElementById("debugLoginError").style.display = "none";
 }
 
-function shouldShowLeaveDebugButton() {
+function canLeaveDevMode() {
     return !devModeEnabled;
 }
 
@@ -224,7 +224,7 @@ function enableDebugUI() {
     const resetAppDataBtn = document.getElementById("resetAppDataBtn");
     if (resetAppDataBtn) resetAppDataBtn.style.display = "block";
     const leaveBtn = document.getElementById("leaveDebugBtn");
-    if (leaveBtn) leaveBtn.style.display = shouldShowLeaveDebugButton() ? "block" : "none";
+    if (leaveBtn) leaveBtn.style.display = canLeaveDevMode() ? "block" : "none";
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "block";
 
@@ -275,7 +275,7 @@ async function loginDebug() {
 
 function logoutDebug() {
     if (devModeEnabled) {
-        showError("Cannot leave dev mode when DEV environment variable is set. Restart without DEV=true to disable.");
+        showError("Dev mode is enabled via server configuration. Contact an administrator to disable it.");
         return;
     }
 
@@ -328,7 +328,7 @@ function logoutDebug() {
 
 async function clearDebugOverrides() {
     if (!debugMode) return;
-    if (!debugPassword && !devModeEnabled) {
+    if (!getDebugAuthHeader()) {
         showError("Debug password not set.");
         return;
     }
