@@ -1855,7 +1855,10 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
 
     const { lookupName, cityName } = await resolveMapSearchContext(stationName, markerCoords);
     applyMapCityInput(cityName);
-    const cacheKey = (lookupName || stationName || "").toLowerCase();
+    const hasCoords = markerCoords && Number.isFinite(markerCoords.lat) && Number.isFinite(markerCoords.lon);
+    const cacheKey = hasCoords
+        ? `${markerCoords.lat},${markerCoords.lon}`
+        : (lookupName || stationName || "").toLowerCase();
     const cached = MAP_POPUP_CACHE.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < MAP_POPUP_CACHE_TTL_MS) {
         container.innerHTML = cached.html;
@@ -1870,10 +1873,10 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
 
     try {
         let departuresToRender = [];
-        if (markerCoords && Number.isFinite(markerCoords.lat) && Number.isFinite(markerCoords.lon)) {
+        if (hasCoords) {
             const lookupResult = await lookupStopByCoords(markerCoords.lat, markerCoords.lon);
             const nearestStopId = lookupResult.stop_id;
-            const nearestStationName = lookupResult.stop_name || stationName || lookupName || stopName || String(nearestStopId);
+            const nearestStationName = lookupResult.stop_name || stationName || lookupName || String(nearestStopId);
             const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
             const byIdResult = await byIdResponse.json();
             if (!byIdResponse.ok || byIdResult.error) {
