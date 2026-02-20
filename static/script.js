@@ -1717,7 +1717,7 @@ async function lookupStopByCoords(lat, lon) {
         return result;
     } catch (error) {
         if (error instanceof TypeError) {
-            throw new Error("Network error while contacting stop lookup service.");
+            throw new Error(`Network error while contacting stop lookup service: ${error.message}`);
         }
         throw error;
     }
@@ -1893,7 +1893,7 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
         } else {
             const fallbackName = lookupName || stationName || "";
             if (!fallbackName) {
-                throw new Error("Stop name required.");
+                throw new Error("Cannot load departures: stop name or coordinates required.");
             }
             const res = await fetch(`/search?stop=${encodeURIComponent(fallbackName)}`);
             const result = await res.json();
