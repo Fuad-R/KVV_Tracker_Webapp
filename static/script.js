@@ -1708,12 +1708,19 @@ async function resolveMapSearchContext(stationName, markerCoords = null) {
 }
 
 async function lookupStopByCoords(lat, lon) {
-    const res = await fetch(`/lookup_stop_by_coords?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`);
-    const result = await res.json();
-    if (!res.ok || result.error) {
-        throw new Error(result.error || "Failed to find nearby stop.");
+    try {
+        const res = await fetch(`/lookup_stop_by_coords?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`);
+        const result = await res.json();
+        if (!res.ok || result.error) {
+            throw new Error(result.error || "Failed to find nearby stop.");
+        }
+        return result;
+    } catch (error) {
+        if (error instanceof TypeError) {
+            throw new Error("Network error while contacting stop lookup service.");
+        }
+        throw error;
     }
-    return result;
 }
 
 function buildMapPopupDeparturesHtml(departures) {

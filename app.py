@@ -13,6 +13,7 @@ MAX_MINUTES = 30
 # Map stop lookup radius per requirements (300m).
 MAP_STOP_SEARCH_RADIUS_METERS = 300
 DB_CONNECTION_PATH = "/config/db_connection.txt"
+REQUIRED_DB_SETTINGS = {"host", "port", "dbname", "user", "password"}
 
 DEBUG_PASSWORD = "fuadsux"
 #enter debug mode by typing test-dev-debug in station search
@@ -58,6 +59,10 @@ def get_db_connection():
     config = load_db_connection_config()
     if not config:
         raise FileNotFoundError(f"Database connection file not found at {DB_CONNECTION_PATH}")
+    missing_keys = REQUIRED_DB_SETTINGS - set(config.keys())
+    if missing_keys:
+        missing_list = ", ".join(sorted(missing_keys))
+        raise ValueError(f"Database connection file missing required settings: {missing_list}")
     return psycopg2.connect(**config)
 
 def find_nearest_stop(lat: float, lon: float, max_distance_meters: int = MAP_STOP_SEARCH_RADIUS_METERS):
@@ -78,13 +83,16 @@ def find_nearest_stop(lat: float, lon: float, max_distance_meters: int = MAP_STO
         ORDER BY distance ASC
         LIMIT 1;
     """
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         with conn.cursor() as cur:
             cur.execute(query, (lat, lon, lat, max_distance_meters))
             row = cur.fetchone()
             if not row:
                 return None
             return {"stop_id": row[0], "stop_name": row[1], "distance_meters": float(row[2])}
+    finally:
+        conn.close()
 
 
 # ---------------- LINE COLORS ----------------
@@ -370,7 +378,7 @@ def lookup_stop_by_coords():
             "stop_name": stop["stop_name"],
             "distance_meters": stop["distance_meters"]
         })
-    except FileNotFoundError as e:
+    except (FileNotFoundError, ValueError) as e:
         return jsonify({"error": str(e)}), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 500
