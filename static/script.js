@@ -4,12 +4,11 @@ const DEBUG_PASSWORD_KEY = "debugPassword";
 const appConfig = window.APP_CONFIG || {};
 const devModeEnabled = appConfig.devMode === true;
 const storedDebugPassword = localStorage.getItem(DEBUG_PASSWORD_KEY) || "";
-const defaultDebugPassword = typeof appConfig.debugPassword === "string" ? appConfig.debugPassword : "";
 let debugPassword = storedDebugPassword;
-if (devModeEnabled) {
-    debugPassword = defaultDebugPassword || storedDebugPassword;
+let debugMode = devModeEnabled;
+if (debugPassword) {
+    debugMode = true;
 }
-let debugMode = devModeEnabled || !!debugPassword;
 let countdown = 30;
 let countdownInterval;
 let refreshInterval;
@@ -270,7 +269,7 @@ async function loginDebug() {
 
 function logoutDebug() {
     if (devModeEnabled) {
-        showError("Cannot leave dev mode when enabled via environment configuration.");
+        showError("Cannot leave dev mode when automatically enabled. Contact your administrator to disable dev mode.");
         return;
     }
 
@@ -323,7 +322,7 @@ function logoutDebug() {
 
 async function clearDebugOverrides() {
     if (!debugMode) return;
-    if (!debugPassword) {
+    if (!debugPassword && !devModeEnabled) {
         showError("Debug password not set.");
         return;
     }
@@ -2335,9 +2334,8 @@ window.addEventListener("DOMContentLoaded", function() {
         document.getElementById("announcementText").textContent = savedAnnouncement;
     }
 
-    // Auto-login if password is saved
-    if (debugPassword) {
-        debugMode = true;
+    // Auto-enable debug UI if dev mode is enabled or a password is saved
+    if (debugMode) {
         enableDebugUI();
     }
 

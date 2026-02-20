@@ -136,7 +136,6 @@ def index(path):
         "index.html",
         app_name=TRANSIT_APP,
         dev_mode=DEV_MODE,
-        debug_password=DEBUG_PASSWORD if DEV_MODE else None,
     )
 
 
@@ -394,7 +393,7 @@ def debug_login():
 def debug_update():
     # Basic check for password (simplified for debug purposes, should be token-based in real app)
     password = request.headers.get("X-Debug-Password")
-    if password != DEBUG_PASSWORD:
+    if not (DEV_MODE or password == DEBUG_PASSWORD):
         return jsonify({"error": "Unauthorized"}), 401
 
     data = request.json
@@ -431,7 +430,7 @@ def debug_update():
 @app.route("/debug/clear", methods=["POST"])
 def debug_clear():
     password = request.headers.get("X-Debug-Password")
-    if password != DEBUG_PASSWORD:
+    if not (DEV_MODE or password == DEBUG_PASSWORD):
         return jsonify({"error": "Unauthorized"}), 401
     
     DEBUG_OVERRIDES.clear()
