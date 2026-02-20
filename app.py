@@ -1,11 +1,13 @@
 from flask import Flask, render_template, jsonify, request
+import os
 import requests
 from datetime import datetime, timedelta
 
 TRANSIT_APP = "Transit App"
 
 #balls
-BASE_URL = "https://transitapi.fuadserver.uk/api"
+DEV_MODE = (os.getenv("dev") or os.getenv("DEV") or "false").strip().lower() == "true"
+BASE_URL = "https://transitapi-dev.fuadserver.uk/api" if DEV_MODE else "https://transitapi.fuadserver.uk/api"
 MAX_MINUTES = 30
 
 DEBUG_PASSWORD = "fuadsux"
