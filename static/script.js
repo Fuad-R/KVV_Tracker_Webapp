@@ -1,7 +1,11 @@
 let stopName = "";
 let stopId = null;
-let debugMode = false;
-let debugPassword = localStorage.getItem("debugPassword") || "";
+const DEBUG_PASSWORD_KEY = "debugPassword";
+const appConfig = window.APP_CONFIG || {};
+const devModeEnabled = appConfig.devMode === true;
+const storedDebugPassword = localStorage.getItem(DEBUG_PASSWORD_KEY) || "";
+let debugPassword = storedDebugPassword;
+let debugMode = devModeEnabled || !!debugPassword;
 let countdown = 30;
 let countdownInterval;
 let refreshInterval;
@@ -19,6 +23,15 @@ const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
 const ANNOUNCEMENT_KEY = 'transit_announcement_text';
 const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
+const APP_STORAGE_KEYS = [
+    FAVORITES_KEY,
+    HOME_STATION_KEY,
+    EXPERIMENTAL_KEY,
+    DEV_LOCATION_KEY,
+    DEBUG_PASSWORD_KEY,
+    ANNOUNCEMENT_KEY,
+    ANNOUNCEMENT_SETTINGS_KEY
+];
 const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
 const MAP_CITY_CACHE = new Map();
@@ -188,6 +201,53 @@ function closeDebugLogin() {
     document.getElementById("debugLoginError").style.display = "none";
 }
 
+function canLeaveDevMode() {
+    return !devModeEnabled;
+}
+
+function getDebugAuthHeader() {
+    if (devModeEnabled) return "dev-mode";
+    if (debugPassword) return debugPassword;
+    return null;
+}
+
+function withDebugAuthHeaders(headers = {}) {
+    const authHeader = getDebugAuthHeader();
+    if (authHeader) {
+        headers["X-Debug-Password"] = authHeader;
+    }
+    return headers;
+}
+
+function setLeaveDebugButtonVisible(isVisible) {
+    const leaveBtn = document.getElementById("leaveDebugBtn");
+    if (leaveBtn) leaveBtn.style.display = isVisible ? "block" : "none";
+}
+
+function enableDebugUI() {
+    const updateBtn = document.getElementById("updateNowBtn");
+    if (updateBtn) updateBtn.style.display = "block";
+    const pauseBtn = document.getElementById("pauseUpdatesBtn");
+    if (pauseBtn) pauseBtn.style.display = "block";
+    const clearOverridesBtn = document.getElementById("clearOverridesBtn");
+    if (clearOverridesBtn) clearOverridesBtn.style.display = "block";
+    const resetAppDataBtn = document.getElementById("resetAppDataBtn");
+    if (resetAppDataBtn) resetAppDataBtn.style.display = "block";
+    setLeaveDebugButtonVisible(canLeaveDevMode());
+    const devLocationBtn = document.getElementById("devLocationBtn");
+    if (devLocationBtn) devLocationBtn.style.display = "block";
+
+    // Show announcement bar in dev mode
+    const announcementBar = document.getElementById("announcementBar");
+    if (announcementBar) announcementBar.style.display = "flex";
+    const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
+    if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
+    const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
+    if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
+
+    updateExperimentalUI();
+}
+
 async function loginDebug() {
     const password = document.getElementById("debugPassword").value;
     try {
@@ -200,26 +260,9 @@ async function loginDebug() {
     if (data.success) {
         debugMode = true;
         debugPassword = password;
-        localStorage.setItem("debugPassword", password);
+        localStorage.setItem(DEBUG_PASSWORD_KEY, password);
         closeDebugLogin();
-        const updateBtn = document.getElementById("updateNowBtn");
-        if (updateBtn) updateBtn.style.display = "block";
-        const pauseBtn = document.getElementById("pauseUpdatesBtn");
-        if (pauseBtn) pauseBtn.style.display = "block";
-        const leaveBtn = document.getElementById("leaveDebugBtn");
-        if (leaveBtn) leaveBtn.style.display = "block";
-        const devLocationBtn = document.getElementById("devLocationBtn");
-        if (devLocationBtn) devLocationBtn.style.display = "block";
-
-        // Show announcement bar in dev mode
-        const announcementBar = document.getElementById("announcementBar");
-        if (announcementBar) announcementBar.style.display = "flex";
-        const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
-        const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
-        if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
-
-        updateExperimentalUI();
+        enableDebugUI();
         applyFilter(); // Re-render to show edit buttons
 
         // Track debug mode login
@@ -240,9 +283,14 @@ async function loginDebug() {
 }
 
 function logoutDebug() {
+    if (devModeEnabled) {
+        showError("Dev mode is enabled via environment variable. Unset DEV/dev or restart without them to disable it.");
+        return;
+    }
+
     debugMode = false;
     debugPassword = "";
-    localStorage.removeItem("debugPassword");
+    localStorage.removeItem(DEBUG_PASSWORD_KEY);
 
     // Track debug mode logout
     if (typeof umami !== 'undefined') {
@@ -254,8 +302,11 @@ function logoutDebug() {
     if (updateBtn) updateBtn.style.display = "none";
     const pauseBtn = document.getElementById("pauseUpdatesBtn");
     if (pauseBtn) pauseBtn.style.display = "none";
-    const leaveBtn = document.getElementById("leaveDebugBtn");
-    if (leaveBtn) leaveBtn.style.display = "none";
+    const clearOverridesBtn = document.getElementById("clearOverridesBtn");
+    if (clearOverridesBtn) clearOverridesBtn.style.display = "none";
+    const resetAppDataBtn = document.getElementById("resetAppDataBtn");
+    if (resetAppDataBtn) resetAppDataBtn.style.display = "none";
+    setLeaveDebugButtonVisible(false);
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "none";
 
@@ -281,6 +332,48 @@ function logoutDebug() {
 
     // Re-render departures to remove edit buttons
     applyFilter();
+}
+
+async function clearDebugOverrides() {
+    if (!debugMode) return;
+    const authHeader = getDebugAuthHeader();
+    if (!authHeader) {
+        showError("Debug authentication not available.");
+        return;
+    }
+    if (!confirm("Clear all debug overrides?")) return;
+    try {
+        const res = await fetch("/debug/clear", {
+            method: "POST",
+            headers: {
+                "X-Debug-Password": authHeader
+            }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            showError(data.error || "Failed to clear overrides.");
+            return;
+        }
+        updateNow();
+        if (typeof umami !== 'undefined') {
+            umami.track('debug-clear-overrides');
+        }
+    } catch (e) {
+        console.error(e);
+        showError("Failed to clear overrides.");
+    }
+}
+
+function resetAppData() {
+    if (!debugMode) return;
+    if (!confirm("Reset ALL saved app data? This cannot be undone.")) return;
+    APP_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+    debugPassword = "";
+    debugMode = devModeEnabled;
+    if (typeof umami !== 'undefined') {
+        umami.track('debug-reset-app-data');
+    }
+    window.location.reload();
 }
 
 function editAnnouncement() {
@@ -523,10 +616,9 @@ async function saveDebugOverride() {
     try {
         const res = await fetch("/debug/update", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Debug-Password": debugPassword
-            },
+            headers: withDebugAuthHeaders({
+                "Content-Type": "application/json"
+            }),
             body: JSON.stringify({
                 stop_id,
                 line,
@@ -560,10 +652,9 @@ async function clearDebugOverride() {
     try {
         const res = await fetch("/debug/update", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Debug-Password": debugPassword
-            },
+            headers: withDebugAuthHeaders({
+                "Content-Type": "application/json"
+            }),
             body: JSON.stringify({
                 stop_id,
                 line,
@@ -2258,25 +2349,9 @@ window.addEventListener("DOMContentLoaded", function() {
         document.getElementById("announcementText").textContent = savedAnnouncement;
     }
 
-    // Auto-login if password is saved
-    if (debugPassword) {
-        debugMode = true;
-        const updateBtn = document.getElementById("updateNowBtn");
-        if (updateBtn) updateBtn.style.display = "block";
-        const pauseBtn = document.getElementById("pauseUpdatesBtn");
-        if (pauseBtn) pauseBtn.style.display = "block";
-        const leaveBtn = document.getElementById("leaveDebugBtn");
-        if (leaveBtn) leaveBtn.style.display = "block";
-        const devLocationBtn = document.getElementById("devLocationBtn");
-        if (devLocationBtn) devLocationBtn.style.display = "block";
-
-        // Show announcement bar in dev mode
-        const announcementBar = document.getElementById("announcementBar");
-        if (announcementBar) announcementBar.style.display = "flex";
-        const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
-
-        updateExperimentalUI();
+    // Auto-enable debug UI if dev mode is enabled or a password is saved
+    if (debugMode) {
+        enableDebugUI();
     }
 
     const urlState = getUrlStateFromPath();

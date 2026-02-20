@@ -132,7 +132,11 @@ def line_color(mot: int, line: str) -> str:
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def index(path):
-    return render_template("index.html", app_name=TRANSIT_APP)
+    return render_template(
+        "index.html",
+        app_name=TRANSIT_APP,
+        dev_mode=DEV_MODE,
+    )
 
 
 @app.route("/sw.js")
@@ -389,7 +393,7 @@ def debug_login():
 def debug_update():
     # Basic check for password (simplified for debug purposes, should be token-based in real app)
     password = request.headers.get("X-Debug-Password")
-    if password != DEBUG_PASSWORD:
+    if not (password == DEBUG_PASSWORD or (DEV_MODE and password == "dev-mode")):
         return jsonify({"error": "Unauthorized"}), 401
 
     data = request.json
@@ -426,7 +430,7 @@ def debug_update():
 @app.route("/debug/clear", methods=["POST"])
 def debug_clear():
     password = request.headers.get("X-Debug-Password")
-    if password != DEBUG_PASSWORD:
+    if not (password == DEBUG_PASSWORD or (DEV_MODE and password == "dev-mode")):
         return jsonify({"error": "Unauthorized"}), 401
     
     DEBUG_OVERRIDES.clear()
@@ -434,4 +438,4 @@ def debug_clear():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=DEV_MODE)
