@@ -23,6 +23,14 @@ const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
 const ANNOUNCEMENT_KEY = 'transit_announcement_text';
 const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
+const APP_STORAGE_KEYS = [
+    FAVORITES_KEY,
+    HOME_STATION_KEY,
+    EXPERIMENTAL_KEY,
+    DEV_LOCATION_KEY,
+    ANNOUNCEMENT_KEY,
+    ANNOUNCEMENT_SETTINGS_KEY
+];
 const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
 const MAP_CITY_CACHE = new Map();
@@ -192,6 +200,31 @@ function closeDebugLogin() {
     document.getElementById("debugLoginError").style.display = "none";
 }
 
+function enableDebugUI() {
+    const updateBtn = document.getElementById("updateNowBtn");
+    if (updateBtn) updateBtn.style.display = "block";
+    const pauseBtn = document.getElementById("pauseUpdatesBtn");
+    if (pauseBtn) pauseBtn.style.display = "block";
+    const clearOverridesBtn = document.getElementById("clearOverridesBtn");
+    if (clearOverridesBtn) clearOverridesBtn.style.display = "block";
+    const resetAppDataBtn = document.getElementById("resetAppDataBtn");
+    if (resetAppDataBtn) resetAppDataBtn.style.display = "block";
+    const leaveBtn = document.getElementById("leaveDebugBtn");
+    if (leaveBtn) leaveBtn.style.display = devModeEnabled ? "none" : "block";
+    const devLocationBtn = document.getElementById("devLocationBtn");
+    if (devLocationBtn) devLocationBtn.style.display = "block";
+
+    // Show announcement bar in dev mode
+    const announcementBar = document.getElementById("announcementBar");
+    if (announcementBar) announcementBar.style.display = "flex";
+    const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
+    if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
+    const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
+    if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
+
+    updateExperimentalUI();
+}
+
 async function loginDebug() {
     const password = document.getElementById("debugPassword").value;
     try {
@@ -206,28 +239,7 @@ async function loginDebug() {
         debugPassword = password;
         localStorage.setItem("debugPassword", password);
         closeDebugLogin();
-        const updateBtn = document.getElementById("updateNowBtn");
-        if (updateBtn) updateBtn.style.display = "block";
-        const pauseBtn = document.getElementById("pauseUpdatesBtn");
-        if (pauseBtn) pauseBtn.style.display = "block";
-        const clearOverridesBtn = document.getElementById("clearOverridesBtn");
-        if (clearOverridesBtn) clearOverridesBtn.style.display = "block";
-        const resetAppDataBtn = document.getElementById("resetAppDataBtn");
-        if (resetAppDataBtn) resetAppDataBtn.style.display = "block";
-        const leaveBtn = document.getElementById("leaveDebugBtn");
-        if (leaveBtn) leaveBtn.style.display = devModeEnabled ? "none" : "block";
-        const devLocationBtn = document.getElementById("devLocationBtn");
-        if (devLocationBtn) devLocationBtn.style.display = "block";
-
-        // Show announcement bar in dev mode
-        const announcementBar = document.getElementById("announcementBar");
-        if (announcementBar) announcementBar.style.display = "flex";
-        const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
-        const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
-        if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
-
-        updateExperimentalUI();
+        enableDebugUI();
         applyFilter(); // Re-render to show edit buttons
 
         // Track debug mode login
@@ -332,8 +344,7 @@ async function clearDebugOverrides() {
 function resetAppData() {
     if (!debugMode) return;
     if (!confirm("Reset saved app data?")) return;
-    [FAVORITES_KEY, HOME_STATION_KEY, EXPERIMENTAL_KEY, DEV_LOCATION_KEY, ANNOUNCEMENT_KEY, ANNOUNCEMENT_SETTINGS_KEY]
-        .forEach((key) => localStorage.removeItem(key));
+    APP_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
     if (typeof umami !== 'undefined') {
         umami.track('debug-reset-app-data');
     }
@@ -2318,28 +2329,7 @@ window.addEventListener("DOMContentLoaded", function() {
     // Auto-login if password is saved
     if (debugPassword) {
         debugMode = true;
-        const updateBtn = document.getElementById("updateNowBtn");
-        if (updateBtn) updateBtn.style.display = "block";
-        const pauseBtn = document.getElementById("pauseUpdatesBtn");
-        if (pauseBtn) pauseBtn.style.display = "block";
-        const clearOverridesBtn = document.getElementById("clearOverridesBtn");
-        if (clearOverridesBtn) clearOverridesBtn.style.display = "block";
-        const resetAppDataBtn = document.getElementById("resetAppDataBtn");
-        if (resetAppDataBtn) resetAppDataBtn.style.display = "block";
-        const leaveBtn = document.getElementById("leaveDebugBtn");
-        if (leaveBtn) leaveBtn.style.display = devModeEnabled ? "none" : "block";
-        const devLocationBtn = document.getElementById("devLocationBtn");
-        if (devLocationBtn) devLocationBtn.style.display = "block";
-
-        // Show announcement bar in dev mode
-        const announcementBar = document.getElementById("announcementBar");
-        if (announcementBar) announcementBar.style.display = "flex";
-        const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
-        const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
-        if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
-
-        updateExperimentalUI();
+        enableDebugUI();
     }
 
     const urlState = getUrlStateFromPath();
