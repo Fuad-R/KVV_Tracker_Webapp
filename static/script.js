@@ -1892,6 +1892,9 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
         if (hasCoords) {
             const lookupResult = await lookupStopByCoords(markerCoords.lat, markerCoords.lon);
             const nearestStopId = lookupResult.stop_id;
+            if (!nearestStopId) {
+                throw new Error("Stop lookup did not return an ID.");
+            }
             const nearestStationName = lookupResult.stop_name || stationName || lookupName || String(nearestStopId);
             const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
             const byIdResult = await byIdResponse.json();
@@ -2076,8 +2079,12 @@ async function selectStationFromMap(name, lat, lon) {
     applyMapCityInput(cityName);
     try {
         const lookupResult = await lookupStopByCoords(lat, lon);
-        const resolvedName = lookupResult.stop_name || lookupName || name || String(lookupResult.stop_id);
-        quickSearchById(lookupResult.stop_id, resolvedName);
+        const resolvedStopId = lookupResult.stop_id;
+        if (!resolvedStopId) {
+            throw new Error("Stop lookup did not return an ID.");
+        }
+        const resolvedName = lookupResult.stop_name || lookupName || name || String(resolvedStopId);
+        quickSearchById(resolvedStopId, resolvedName);
     } catch (error) {
         console.error("Error selecting map stop:", error);
         showError("No nearby stop found for this map location.");

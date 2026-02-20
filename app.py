@@ -1,4 +1,5 @@
 from flask import Flask, render_template, jsonify, request
+from contextlib import closing
 import os
 import psycopg2
 import requests
@@ -83,16 +84,13 @@ def find_nearest_stop(lat: float, lon: float, max_distance_meters: int = MAP_STO
         ORDER BY distance ASC
         LIMIT 1;
     """
-    conn = get_db_connection()
-    try:
+    with closing(get_db_connection()) as conn:
         with conn.cursor() as cur:
             cur.execute(query, (lat, lon, lat, max_distance_meters))
             row = cur.fetchone()
             if not row:
                 return None
             return {"stop_id": row[0], "stop_name": row[1], "distance_meters": float(row[2])}
-    finally:
-        conn.close()
 
 
 # ---------------- LINE COLORS ----------------
