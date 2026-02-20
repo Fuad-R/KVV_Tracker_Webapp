@@ -1708,18 +1708,27 @@ async function resolveMapSearchContext(stationName, markerCoords = null) {
 }
 
 async function lookupStopByCoords(lat, lon) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
-        const res = await fetch(`/lookup_stop_by_coords?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`);
+        const res = await fetch(`/lookup_stop_by_coords?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`, {
+            signal: controller.signal
+        });
         const result = await res.json();
         if (!res.ok || result.error) {
             throw new Error(result.error || "Failed to find nearby stop.");
         }
         return result;
     } catch (error) {
+        if (error.name === "AbortError") {
+            throw new Error("Stop lookup timed out.");
+        }
         if (error instanceof TypeError) {
             throw new Error(`Network error while contacting stop lookup service: ${error.message}`);
         }
         throw error;
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 
@@ -1893,7 +1902,7 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
         } else {
             const fallbackName = lookupName || stationName || "";
             if (!fallbackName) {
-                throw new Error("Cannot load departures: stop name or coordinates required.");
+                throw new Error("Cannot load departures: stop name is required.");
             }
             const res = await fetch(`/search?stop=${encodeURIComponent(fallbackName)}`);
             const result = await res.json();

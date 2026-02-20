@@ -368,6 +368,8 @@ def lookup_stop_by_coords():
         lon = float(lon)
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid coordinates"}), 400
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return jsonify({"error": "Coordinates out of range"}), 400
 
     try:
         stop = find_nearest_stop(lat, lon)
