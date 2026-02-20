@@ -208,6 +208,12 @@ function shouldShowLeaveDebugButton() {
     return !devModeEnabled;
 }
 
+function getDebugAuthHeader() {
+    if (debugPassword) return debugPassword;
+    if (devModeEnabled) return "dev-mode";
+    return "";
+}
+
 function enableDebugUI() {
     const updateBtn = document.getElementById("updateNowBtn");
     if (updateBtn) updateBtn.style.display = "block";
@@ -269,7 +275,7 @@ async function loginDebug() {
 
 function logoutDebug() {
     if (devModeEnabled) {
-        showError("Cannot leave dev mode when automatically enabled. Contact your administrator to disable dev mode.");
+        showError("Cannot leave dev mode when DEV environment variable is set. Restart without DEV=true to disable.");
         return;
     }
 
@@ -331,7 +337,7 @@ async function clearDebugOverrides() {
         const res = await fetch("/debug/clear", {
             method: "POST",
             headers: {
-                "X-Debug-Password": debugPassword
+                "X-Debug-Password": getDebugAuthHeader()
             }
         });
         const data = await res.json();
@@ -601,7 +607,7 @@ async function saveDebugOverride() {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "X-Debug-Password": debugPassword
+                "X-Debug-Password": getDebugAuthHeader()
             },
             body: JSON.stringify({
                 stop_id,
@@ -638,7 +644,7 @@ async function clearDebugOverride() {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "X-Debug-Password": debugPassword
+                "X-Debug-Password": getDebugAuthHeader()
             },
             body: JSON.stringify({
                 stop_id,
