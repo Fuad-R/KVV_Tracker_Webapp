@@ -1,5 +1,7 @@
 from flask import Flask, render_template, jsonify, request
+from contextlib import closing
 import os
+import psycopg2
 import requests
 from datetime import datetime, timedelta
 
@@ -9,6 +11,10 @@ TRANSIT_APP = "Transit App"
 DEV_MODE = (os.getenv("dev") or os.getenv("DEV") or "false").strip().lower() == "true"
 BASE_URL = "https://transitapi-dev.fuadserver.uk/api" if DEV_MODE else "https://transitapi.fuadserver.uk/api"
 MAX_MINUTES = 30
+# Map stop lookup radius (300m) to match map selection requirements.
+MAP_STOP_SEARCH_RADIUS_METERS = 300
+DB_CONNECTION_PATH = "/config/db_connection.txt"
+REQUIRED_DB_SETTINGS = {"host", "port", "dbname", "user", "password"}
 
 DEBUG_PASSWORD = "fuadsux"
 #enter debug mode by typing test-dev-debug in station search
@@ -36,6 +42,55 @@ def get_stop_departures(stop_id: str):
     r = requests.get(f"{BASE_URL}/stops/{stop_id}", params={"detailed": "1", "delay": "1"}, timeout=10)
     r.raise_for_status()
     return r.json()
+
+def load_db_connection_config(path: str = DB_CONNECTION_PATH):
+    if not os.path.exists(path):
+        return None
+    config = {}
+    with open(path, "r", encoding="utf-8") as config_file:
+        for line in config_file:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            config[key.strip()] = value.strip()
+    return config
+
+def get_db_connection():
+    config = load_db_connection_config()
+    if not config:
+        raise FileNotFoundError(f"Database connection file not found at {DB_CONNECTION_PATH}")
+    missing_keys = REQUIRED_DB_SETTINGS - set(config.keys())
+    if missing_keys:
+        missing_list = ", ".join(sorted(missing_keys))
+        raise ValueError(f"Database connection file missing required settings: {missing_list}")
+    return psycopg2.connect(**config)
+
+def find_nearest_stop(lat: float, lon: float, max_distance_meters: int = MAP_STOP_SEARCH_RADIUS_METERS):
+    query = """
+        SELECT stop_id, stop_name, distance
+        FROM (
+            SELECT stop_id, stop_name,
+                6371000 * acos(
+                    LEAST(1.0, GREATEST(-1.0,
+                        cos(radians(%s)) * cos(radians(stop_lat)) * cos(radians(stop_lon) - radians(%s)) +
+                        sin(radians(%s)) * sin(radians(stop_lat))
+                    ))
+                ) AS distance
+            FROM stops
+            WHERE stop_lat IS NOT NULL AND stop_lon IS NOT NULL
+        ) AS distances
+        WHERE distance <= %s
+        ORDER BY distance ASC
+        LIMIT 1;
+    """
+    with closing(get_db_connection()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (lat, lon, lat, max_distance_meters))
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {"stop_id": row[0], "stop_name": row[1], "distance_meters": float(row[2])}
 
 
 # ---------------- LINE COLORS ----------------
@@ -295,6 +350,36 @@ def search_by_id():
             "departures": data
         })
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/lookup_stop_by_coords")
+def lookup_stop_by_coords():
+    lat = request.args.get("lat")
+    lon = request.args.get("lon")
+    if lat is None or lon is None:
+        return jsonify({"error": "Latitude and longitude required"}), 400
+
+    try:
+        lat = float(lat)
+        lon = float(lon)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid coordinates"}), 400
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return jsonify({"error": "Coordinates out of range"}), 400
+
+    try:
+        stop = find_nearest_stop(lat, lon)
+        if not stop:
+            return jsonify({"error": "No nearby stop found"}), 404
+        return jsonify({
+            "stop_id": stop["stop_id"],
+            "stop_name": stop["stop_name"],
+            "distance_meters": stop["distance_meters"]
+        })
+    except (FileNotFoundError, ValueError) as e:
+        return jsonify({"error": str(e)}), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

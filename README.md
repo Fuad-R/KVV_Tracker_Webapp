@@ -62,6 +62,14 @@ A Flask-based web application to track real-time departures of the Transit App (
    docker run -p 5000:5000 transit-tracker
    ```
 
+### Database configuration (map stop lookup)
+
+To enable coordinate-based map stop lookups, provide a PostgreSQL connection file at `/config/db_connection.txt` inside the container. Use `db_connection.txt.example` as a template for the contents and mount it when running Docker, for example:
+
+```bash
+docker run -p 5000:5000 -v /path/to/db_connection.txt:/config/db_connection.txt transit-tracker
+```
+
 ## Usage
 
 ### Station Search
