@@ -284,7 +284,7 @@ async function loginDebug() {
 
 function logoutDebug() {
     if (devModeEnabled) {
-        showError("Dev mode is enabled via environment variable. Unset DEV or restart without the DEV variable to disable it.");
+        showError("Dev mode is enabled via environment variable. Unset DEV/dev or restart without them to disable it.");
         return;
     }
 
@@ -366,7 +366,7 @@ async function clearDebugOverrides() {
 
 function resetAppData() {
     if (!debugMode) return;
-    if (!confirm("Reset ALL saved app data (favorites, home station, debug password, etc.)? This cannot be undone.")) return;
+    if (!confirm("Reset ALL saved app data? This cannot be undone.")) return;
     APP_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
     debugPassword = "";
     debugMode = devModeEnabled;
