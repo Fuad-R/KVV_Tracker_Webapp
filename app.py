@@ -393,7 +393,7 @@ def debug_login():
 def debug_update():
     # Basic check for password (simplified for debug purposes, should be token-based in real app)
     password = request.headers.get("X-Debug-Password")
-    if not (DEV_MODE or password == DEBUG_PASSWORD):
+    if not (password == DEBUG_PASSWORD or (DEV_MODE and password == "dev-mode")):
         return jsonify({"error": "Unauthorized"}), 401
 
     data = request.json
@@ -430,7 +430,7 @@ def debug_update():
 @app.route("/debug/clear", methods=["POST"])
 def debug_clear():
     password = request.headers.get("X-Debug-Password")
-    if not (DEV_MODE or password == DEBUG_PASSWORD):
+    if not (password == DEBUG_PASSWORD or (DEV_MODE and password == "dev-mode")):
         return jsonify({"error": "Unauthorized"}), 401
     
     DEBUG_OVERRIDES.clear()

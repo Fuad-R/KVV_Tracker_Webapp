@@ -5,10 +5,7 @@ const appConfig = window.APP_CONFIG || {};
 const devModeEnabled = appConfig.devMode === true;
 const storedDebugPassword = localStorage.getItem(DEBUG_PASSWORD_KEY) || "";
 let debugPassword = storedDebugPassword;
-let debugMode = devModeEnabled;
-if (debugPassword) {
-    debugMode = true;
-}
+let debugMode = devModeEnabled || !!debugPassword;
 let countdown = 30;
 let countdownInterval;
 let refreshInterval;
@@ -209,8 +206,8 @@ function canLeaveDevMode() {
 }
 
 function getDebugAuthHeader() {
-    if (debugPassword) return debugPassword;
     if (devModeEnabled) return "dev-mode";
+    if (debugPassword) return debugPassword;
     return "";
 }
 
@@ -329,7 +326,7 @@ function logoutDebug() {
 async function clearDebugOverrides() {
     if (!debugMode) return;
     if (!getDebugAuthHeader()) {
-        showError("Debug password not set.");
+        showError("Debug authentication not available.");
         return;
     }
     if (!confirm("Clear all debug overrides?")) return;
