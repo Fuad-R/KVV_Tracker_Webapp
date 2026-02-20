@@ -4,7 +4,10 @@ const appConfig = window.APP_CONFIG || {};
 const devModeEnabled = appConfig.devMode === true;
 const storedDebugPassword = localStorage.getItem("debugPassword") || "";
 const defaultDebugPassword = typeof appConfig.debugPassword === "string" ? appConfig.debugPassword : "";
-let debugPassword = devModeEnabled ? (defaultDebugPassword || storedDebugPassword) : storedDebugPassword;
+let debugPassword = storedDebugPassword;
+if (devModeEnabled) {
+    debugPassword = defaultDebugPassword || storedDebugPassword;
+}
 let debugMode = devModeEnabled || !!debugPassword;
 let countdown = 30;
 let countdownInterval;
@@ -200,6 +203,10 @@ function closeDebugLogin() {
     document.getElementById("debugLoginError").style.display = "none";
 }
 
+function shouldShowLeaveDebugButton() {
+    return !devModeEnabled;
+}
+
 function enableDebugUI() {
     const updateBtn = document.getElementById("updateNowBtn");
     if (updateBtn) updateBtn.style.display = "block";
@@ -210,7 +217,7 @@ function enableDebugUI() {
     const resetAppDataBtn = document.getElementById("resetAppDataBtn");
     if (resetAppDataBtn) resetAppDataBtn.style.display = "block";
     const leaveBtn = document.getElementById("leaveDebugBtn");
-    if (leaveBtn) leaveBtn.style.display = devModeEnabled ? "none" : "block";
+    if (leaveBtn) leaveBtn.style.display = shouldShowLeaveDebugButton() ? "block" : "none";
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "block";
 
@@ -261,7 +268,7 @@ async function loginDebug() {
 
 function logoutDebug() {
     if (devModeEnabled) {
-        showError("Dev mode is enabled by configuration.");
+        showError("Cannot leave dev mode when enabled via environment configuration.");
         return;
     }
 
