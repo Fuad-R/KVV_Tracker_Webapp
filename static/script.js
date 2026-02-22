@@ -52,13 +52,13 @@ const MAP_STOP_ICONS = {
     db: L.icon({ ...MAP_STOP_ICON_OPTIONS, iconUrl: "/static/icons/db.png" }),
     bus: L.icon({ ...MAP_STOP_ICON_OPTIONS, iconUrl: "/static/icons/busstop.png" })
 };
-const MAP_STOP_ICON_IMAGES = Object.values(MAP_STOP_ICONS).map(icon => {
+const MAP_STOP_ICON_PRELOAD_IMAGES = Object.values(MAP_STOP_ICONS).map(icon => {
     const img = new Image();
     img.src = icon.options.iconUrl;
     return img;
 });
 const MAP_STOP_ICON_READY = Promise.all(
-    MAP_STOP_ICON_IMAGES.map(img => {
+    MAP_STOP_ICON_PRELOAD_IMAGES.map(img => {
         if (!img.decode) {
             return Promise.resolve();
         }
@@ -2071,14 +2071,13 @@ async function updateOverpassMarkers() {
         });
         const data = await response.json();
 
-        const isStaleRequest = () => requestId !== mapOverpassRequestId;
-        if (isStaleRequest()) {
+        if (requestId !== mapOverpassRequestId) {
             return;
         }
 
         await MAP_STOP_ICON_READY;
 
-        if (isStaleRequest()) {
+        if (requestId !== mapOverpassRequestId) {
             return;
         }
 
