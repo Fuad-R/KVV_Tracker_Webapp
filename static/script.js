@@ -19,7 +19,6 @@ let openMapPopupName = null;
 let isRefreshingMapMarkers = false;
 let mapOverpassRequestId = 0;
 const mapOverpassActiveRequests = new Set();
-let mapStopIconPreloadReported = false;
 const FAVORITES_KEY = 'transit_favorites';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
@@ -2105,19 +2104,7 @@ async function updateOverpassMarkers() {
             return;
         }
 
-        const iconsReady = await iconReadyPromise;
-        if (!iconsReady && !mapStopIconPreloadReported) {
-            console.warn("Stop icon preload encountered errors; continuing with cached icons.");
-            mapStopIconPreloadReported = true;
-        } else if (iconsReady && mapStopIconPreloadReported) {
-            console.debug("Stop icon preload recovered.");
-            mapStopIconPreloadReported = false;
-        }
-
-        if (isStaleMapOverpassRequest(requestId)) {
-            logStaleMapOverpassRequest(requestId);
-            return;
-        }
+        await iconReadyPromise;
 
         const pendingPopupName = openMapPopupName;
         isRefreshingMapMarkers = true;
