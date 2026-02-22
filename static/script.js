@@ -2066,9 +2066,14 @@ function logStaleMapOverpassRequest(requestId) {
     console.debug(`Skipping stale map marker update for request ${requestId} (latest: ${mapOverpassRequestId})`);
 }
 
+function nextMapOverpassRequestId() {
+    mapOverpassRequestId += 1;
+    return mapOverpassRequestId;
+}
+
 async function updateOverpassMarkers() {
     const loadingIndicator = document.getElementById('mapLoading');
-    const requestId = ++mapOverpassRequestId;
+    const requestId = nextMapOverpassRequestId();
     mapOverpassActiveRequests.add(requestId);
     if (loadingIndicator) loadingIndicator.style.display = 'flex';
     const iconReadyPromise = MAP_STOP_ICON_READY;
@@ -2104,6 +2109,9 @@ async function updateOverpassMarkers() {
         if (!iconsReady && !mapStopIconPreloadReported) {
             console.warn("Stop icon preload encountered errors; continuing with cached icons.");
             mapStopIconPreloadReported = true;
+        } else if (iconsReady && mapStopIconPreloadReported) {
+            console.debug("Stop icon preload recovered.");
+            mapStopIconPreloadReported = false;
         }
 
         if (isStaleMapOverpassRequest(requestId)) {
@@ -2211,10 +2219,8 @@ async function updateOverpassMarkers() {
     } catch (error) {
         console.error('Error fetching Overpass data:', error);
     } finally {
-        if (requestId === mapOverpassRequestId) {
-            isRefreshingMapMarkers = false;
-        }
         mapOverpassActiveRequests.delete(requestId);
+        isRefreshingMapMarkers = mapOverpassActiveRequests.size > 0;
         if (mapOverpassActiveRequests.size === 0 && loadingIndicator) {
             loadingIndicator.style.display = 'none';
         }
