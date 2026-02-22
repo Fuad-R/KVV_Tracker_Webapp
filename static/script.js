@@ -52,21 +52,24 @@ const MAP_STOP_ICONS = {
     db: L.icon({ ...MAP_STOP_ICON_OPTIONS, iconUrl: "/static/icons/db.png" }),
     bus: L.icon({ ...MAP_STOP_ICON_OPTIONS, iconUrl: "/static/icons/busstop.png" })
 };
-const MAP_STOP_ICON_PRELOAD_IMAGES = Object.values(MAP_STOP_ICONS).map(icon => {
-    const img = new Image();
-    img.src = icon.options.iconUrl;
-    return img;
-});
-const MAP_STOP_ICON_READY = Promise.all(
-    MAP_STOP_ICON_PRELOAD_IMAGES.map(img => {
-        if (!img.decode) {
-            return Promise.resolve();
-        }
-        return img.decode().catch(error => {
-            console.warn("Stop icon preload failed for", img.src, ":", error);
-        });
-    })
-);
+const MAP_STOP_ICON_READY = (() => {
+    const preloadImages = Object.values(MAP_STOP_ICONS).map(icon => {
+        const img = new Image();
+        img.src = icon.options.iconUrl;
+        return img;
+    });
+    return Promise.all(
+        preloadImages.map(img => {
+            if (typeof img.decode !== "function") {
+                // Some browsers do not support decode(); skip graceful preloads there.
+                return Promise.resolve();
+            }
+            return img.decode().catch(error => {
+                console.warn("Stop icon preload failed for", img.src, ":", error);
+            });
+        })
+    );
+})();
 // Respect Nominatim usage policy with throttled lookups and a custom User-Agent.
 let mapCityLastRequestAt = 0;
 let mapCityFailureCount = 0;
@@ -2048,6 +2051,7 @@ async function updateOverpassMarkers() {
     const loadingIndicator = document.getElementById('mapLoading');
     if (loadingIndicator) loadingIndicator.style.display = 'flex';
     const requestId = ++mapOverpassRequestId;
+    const iconReadyPromise = MAP_STOP_ICON_READY;
 
     const bounds = map.getBounds();
     const sw = bounds.getSouthWest();
@@ -2075,7 +2079,7 @@ async function updateOverpassMarkers() {
             return;
         }
 
-        await MAP_STOP_ICON_READY;
+        await iconReadyPromise;
 
         if (requestId !== mapOverpassRequestId) {
             return;
