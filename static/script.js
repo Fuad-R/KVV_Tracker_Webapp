@@ -18,6 +18,7 @@ let searchTimeout = null;
 let openMapPopupName = null;
 let isRefreshingMapMarkers = false;
 let mapOverpassRequestId = 0;
+let mapOverpassActiveRequests = 0;
 const FAVORITES_KEY = 'transit_favorites';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
@@ -53,23 +54,28 @@ const MAP_STOP_ICONS = {
     bus: L.icon({ ...MAP_STOP_ICON_OPTIONS, iconUrl: "/static/icons/busstop.png" })
 };
 const MAP_STOP_ICON_READY = (() => {
-    const preloadImages = Object.values(MAP_STOP_ICONS).map(icon => {
-        const img = new Image();
-        img.src = icon.options.iconUrl;
-        return img;
-    });
-    return Promise.all(
-        preloadImages.map(img => {
-            if (typeof img.decode !== "function") {
-                // Older browsers (e.g., IE11) do not support decode(); skip the decode optimization there.
-                return Promise.resolve();
+    const preloadPromises = Object.values(MAP_STOP_ICONS).map(icon => {
+        const iconUrl = icon.options.iconUrl;
+        return new Promise(resolve => {
+            const img = new Image();
+            let settled = false;
+            const finish = (error) => {
+                if (settled) return;
+                settled = true;
+                if (error) {
+                    console.warn("Stop icon preload failed for", iconUrl, ":", error);
+                }
+                resolve();
+            };
+            img.onload = () => finish();
+            img.onerror = (event) => finish(event);
+            img.src = iconUrl;
+            if (img.complete) {
+                finish();
             }
-            return img.decode().catch(error => {
-                console.warn("Stop icon preload failed for", img.src, ":", error);
-                return Promise.resolve();
-            });
-        })
-    );
+        });
+    });
+    return Promise.all(preloadPromises);
 })();
 // Respect Nominatim usage policy with throttled lookups and a custom User-Agent.
 let mapCityLastRequestAt = 0;
@@ -2054,6 +2060,7 @@ function isStaleOverpassRequest(requestId) {
 
 async function updateOverpassMarkers() {
     const loadingIndicator = document.getElementById('mapLoading');
+    mapOverpassActiveRequests += 1;
     if (loadingIndicator) loadingIndicator.style.display = 'flex';
     const requestId = ++mapOverpassRequestId;
     const iconReadyPromise = MAP_STOP_ICON_READY;
@@ -2189,7 +2196,10 @@ async function updateOverpassMarkers() {
     } finally {
         if (requestId === mapOverpassRequestId) {
             isRefreshingMapMarkers = false;
-            if (loadingIndicator) loadingIndicator.style.display = 'none';
+        }
+        mapOverpassActiveRequests = Math.max(0, mapOverpassActiveRequests - 1);
+        if (mapOverpassActiveRequests === 0 && loadingIndicator) {
+            loadingIndicator.style.display = 'none';
         }
     }
 }
