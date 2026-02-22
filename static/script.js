@@ -63,7 +63,7 @@ const MAP_STOP_ICON_READY = Promise.all(
             return Promise.resolve();
         }
         return img.decode().catch(error => {
-            console.warn("Stop icon preload failed:", error);
+            console.warn("Stop icon preload failed for", img.src, ":", error);
         });
     })
 );
@@ -2071,13 +2071,14 @@ async function updateOverpassMarkers() {
         });
         const data = await response.json();
 
-        if (requestId !== mapOverpassRequestId) {
+        const isStaleRequest = () => requestId !== mapOverpassRequestId;
+        if (isStaleRequest()) {
             return;
         }
 
         await MAP_STOP_ICON_READY;
 
-        if (requestId !== mapOverpassRequestId) {
+        if (isStaleRequest()) {
             return;
         }
 
