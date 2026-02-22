@@ -17,6 +17,8 @@ let userMarker = null;
 let searchTimeout = null;
 let openMapPopupName = null;
 let isRefreshingMapMarkers = false;
+let mapOverpassRequestId = 0;
+const mapOverpassActiveRequests = new Set();
 const FAVORITES_KEY = 'transit_favorites';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
@@ -42,6 +44,42 @@ const MAP_CITY_FAILURE_WARN_THRESHOLD = 3;
 const MAP_CITY_NOMINATIM_URL = (typeof window !== "undefined" && window.NOMINATIM_URL)
     ? window.NOMINATIM_URL
     : "https://nominatim.openstreetmap.org/reverse";
+const MAP_STOP_ICON_OPTIONS = {
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12]
+};
+const MAP_STOP_ICONS = {
+    db: L.icon({ ...MAP_STOP_ICON_OPTIONS, iconUrl: "/static/icons/db.png" }),
+    bus: L.icon({ ...MAP_STOP_ICON_OPTIONS, iconUrl: "/static/icons/busstop.png" })
+};
+const MAP_STOP_ICON_READY = (() => {
+    const preloadPromises = Object.values(MAP_STOP_ICONS).map(icon => {
+        const iconUrl = icon.options.iconUrl;
+        return new Promise(resolve => {
+            const img = new Image();
+            let settled = false;
+            const finish = (error) => {
+                if (settled) return;
+                settled = true;
+                if (error) {
+                    const errorDetail = error?.type || error?.message || error;
+                    console.warn("Stop icon preload failed for", iconUrl, ":", errorDetail);
+                    resolve(false);
+                    return;
+                }
+                resolve(true);
+            };
+            img.onload = () => finish();
+            img.onerror = (event) => finish(event);
+            img.src = iconUrl;
+            if (img.complete) {
+                finish();
+            }
+        });
+    });
+    return Promise.all(preloadPromises).then(results => results.every(Boolean));
+})();
 // Respect Nominatim usage policy with throttled lookups and a custom User-Agent.
 let mapCityLastRequestAt = 0;
 let mapCityFailureCount = 0;
@@ -2019,9 +2057,25 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
     }
 }
 
+function isStaleMapOverpassRequest(requestId) {
+    return requestId !== mapOverpassRequestId;
+}
+
+function logStaleMapOverpassRequest(requestId) {
+    console.debug(`Skipping stale map marker update for request ${requestId} (latest: ${mapOverpassRequestId})`);
+}
+
+function nextMapOverpassRequestId() {
+    mapOverpassRequestId += 1;
+    return mapOverpassRequestId;
+}
+
 async function updateOverpassMarkers() {
     const loadingIndicator = document.getElementById('mapLoading');
+    const requestId = nextMapOverpassRequestId();
+    mapOverpassActiveRequests.add(requestId);
     if (loadingIndicator) loadingIndicator.style.display = 'flex';
+    const iconReadyPromise = MAP_STOP_ICON_READY;
 
     const bounds = map.getBounds();
     const sw = bounds.getSouthWest();
@@ -2044,6 +2098,13 @@ async function updateOverpassMarkers() {
             body: query
         });
         const data = await response.json();
+
+        if (isStaleMapOverpassRequest(requestId)) {
+            logStaleMapOverpassRequest(requestId);
+            return;
+        }
+
+        await iconReadyPromise;
 
         const pendingPopupName = openMapPopupName;
         isRefreshingMapMarkers = true;
@@ -2101,17 +2162,8 @@ async function updateOverpassMarkers() {
             const info = stopsByName[name];
             const avgLat = info.latSum / info.count;
             const avgLon = info.lonSum / info.count;
-            
-            const iconSrc = info.isDB ? '/static/icons/db.png' : '/static/icons/busstop.png';
-            
-            // Custom station icon
-            const stationIcon = L.icon({
-                iconUrl: iconSrc,
-                iconSize: [24, 24],
-                iconAnchor: [12, 12],
-                popupAnchor: [0, -12]
-            });
 
+            const stationIcon = info.isDB ? MAP_STOP_ICONS.db : MAP_STOP_ICONS.bus;
             const marker = L.marker([avgLat, avgLon], { icon: stationIcon });
             
             const popupContent = document.createElement('div');
@@ -2154,8 +2206,11 @@ async function updateOverpassMarkers() {
     } catch (error) {
         console.error('Error fetching Overpass data:', error);
     } finally {
-        isRefreshingMapMarkers = false;
-        if (loadingIndicator) loadingIndicator.style.display = 'none';
+        mapOverpassActiveRequests.delete(requestId);
+        isRefreshingMapMarkers = mapOverpassActiveRequests.size > 0;
+        if (mapOverpassActiveRequests.size === 0 && loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
     }
 }
 
