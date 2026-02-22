@@ -57,7 +57,9 @@ const MAP_STOP_ICON_IMAGES = Object.values(MAP_STOP_ICONS).map(icon => {
     img.src = icon.options.iconUrl;
     return img;
 });
-MAP_STOP_ICON_IMAGES.forEach(img => img.decode?.().catch(() => {}));
+MAP_STOP_ICON_IMAGES.forEach(img => img.decode?.().catch(error => {
+    console.warn("Stop icon preload failed:", error);
+}));
 // Respect Nominatim usage policy with throttled lookups and a custom User-Agent.
 let mapCityLastRequestAt = 0;
 let mapCityFailureCount = 0;
