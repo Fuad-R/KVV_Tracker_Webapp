@@ -2058,8 +2058,12 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
     }
 }
 
-function isStaleOverpassRequest(requestId) {
+function isStaleMapOverpassRequest(requestId) {
     return requestId !== mapOverpassRequestId;
+}
+
+function logStaleMapOverpassRequest(requestId) {
+    console.debug(`Skipping stale map marker update for request ${requestId} (latest: ${mapOverpassRequestId})`);
 }
 
 async function updateOverpassMarkers() {
@@ -2091,8 +2095,8 @@ async function updateOverpassMarkers() {
         });
         const data = await response.json();
 
-        if (isStaleOverpassRequest(requestId)) {
-            console.debug(`Skipping stale map marker update for request ${requestId} (latest: ${mapOverpassRequestId})`);
+        if (isStaleMapOverpassRequest(requestId)) {
+            logStaleMapOverpassRequest(requestId);
             return;
         }
 
@@ -2102,8 +2106,8 @@ async function updateOverpassMarkers() {
             mapStopIconPreloadReported = true;
         }
 
-        if (isStaleOverpassRequest(requestId)) {
-            console.debug(`Skipping stale map marker update for request ${requestId} (latest: ${mapOverpassRequestId})`);
+        if (isStaleMapOverpassRequest(requestId)) {
+            logStaleMapOverpassRequest(requestId);
             return;
         }
 
