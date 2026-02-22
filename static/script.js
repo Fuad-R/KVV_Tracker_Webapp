@@ -61,7 +61,7 @@ const MAP_STOP_ICON_READY = (() => {
     return Promise.all(
         preloadImages.map(img => {
             if (typeof img.decode !== "function") {
-                // Some browsers do not support decode(); skip the decode optimization there.
+                // Older browsers (e.g., IE11) do not support decode(); skip the decode optimization there.
                 return Promise.resolve();
             }
             return img.decode().catch(error => {
@@ -2083,6 +2083,7 @@ async function updateOverpassMarkers() {
         await iconReadyPromise;
 
         if (isStaleOverpassRequest(requestId)) {
+            console.debug("Skipping stale map marker update for request", requestId);
             return;
         }
 
