@@ -19,6 +19,8 @@ let openMapPopupName = null;
 let isRefreshingMapMarkers = false;
 let mapOverpassRequestId = 0;
 const mapOverpassActiveRequests = new Set();
+let mapStopIconPreloadFailed = false;
+let mapStopIconPreloadReported = false;
 const FAVORITES_KEY = 'transit_favorites';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
@@ -63,6 +65,7 @@ const MAP_STOP_ICON_READY = (() => {
                 if (settled) return;
                 settled = true;
                 if (error) {
+                    mapStopIconPreloadFailed = true;
                     const errorDetail = error?.type || error?.message || error;
                     console.warn("Stop icon preload failed for", iconUrl, ":", errorDetail);
                 }
@@ -76,7 +79,7 @@ const MAP_STOP_ICON_READY = (() => {
             }
         });
     });
-    return Promise.all(preloadPromises);
+    return Promise.all(preloadPromises).then(() => !mapStopIconPreloadFailed);
 })();
 // Respect Nominatim usage policy with throttled lookups and a custom User-Agent.
 let mapCityLastRequestAt = 0;
@@ -2088,10 +2091,14 @@ async function updateOverpassMarkers() {
         });
         const data = await response.json();
 
-        await iconReadyPromise;
+        const iconsReady = await iconReadyPromise;
+        if (!iconsReady && !mapStopIconPreloadReported) {
+            console.warn("Stop icon preload encountered errors; continuing with cached icons.");
+            mapStopIconPreloadReported = true;
+        }
 
         if (isStaleOverpassRequest(requestId)) {
-            console.debug(`Skipping stale map marker update for request ${requestId} (current: ${mapOverpassRequestId})`);
+            console.debug(`Skipping stale map marker update for request ${requestId} (latest: ${mapOverpassRequestId})`);
             return;
         }
 
