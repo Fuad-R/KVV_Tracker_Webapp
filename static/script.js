@@ -18,7 +18,7 @@ let searchTimeout = null;
 let openMapPopupName = null;
 let isRefreshingMapMarkers = false;
 let mapOverpassRequestId = 0;
-let mapOverpassActiveRequests = 0;
+const mapOverpassActiveRequests = new Set();
 const FAVORITES_KEY = 'transit_favorites';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
@@ -2060,9 +2060,9 @@ function isStaleOverpassRequest(requestId) {
 
 async function updateOverpassMarkers() {
     const loadingIndicator = document.getElementById('mapLoading');
-    mapOverpassActiveRequests += 1;
-    if (loadingIndicator) loadingIndicator.style.display = 'flex';
     const requestId = ++mapOverpassRequestId;
+    mapOverpassActiveRequests.add(requestId);
+    if (loadingIndicator) loadingIndicator.style.display = 'flex';
     const iconReadyPromise = MAP_STOP_ICON_READY;
 
     const bounds = map.getBounds();
@@ -2197,8 +2197,8 @@ async function updateOverpassMarkers() {
         if (requestId === mapOverpassRequestId) {
             isRefreshingMapMarkers = false;
         }
-        mapOverpassActiveRequests = Math.max(0, mapOverpassActiveRequests - 1);
-        if (mapOverpassActiveRequests === 0 && loadingIndicator) {
+        mapOverpassActiveRequests.delete(requestId);
+        if (mapOverpassActiveRequests.size === 0 && loadingIndicator) {
             loadingIndicator.style.display = 'none';
         }
     }
