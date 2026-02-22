@@ -61,7 +61,7 @@ const MAP_STOP_ICON_READY = (() => {
     return Promise.all(
         preloadImages.map(img => {
             if (typeof img.decode !== "function") {
-                // Some browsers do not support decode(); skip graceful preloads there.
+                // Some browsers do not support decode(); skip the decode optimization there.
                 return Promise.resolve();
             }
             return img.decode().catch(error => {
@@ -2047,6 +2047,10 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
     }
 }
 
+function isStaleOverpassRequest(requestId) {
+    return requestId !== mapOverpassRequestId;
+}
+
 async function updateOverpassMarkers() {
     const loadingIndicator = document.getElementById('mapLoading');
     if (loadingIndicator) loadingIndicator.style.display = 'flex';
@@ -2075,13 +2079,13 @@ async function updateOverpassMarkers() {
         });
         const data = await response.json();
 
-        if (requestId !== mapOverpassRequestId) {
+        if (isStaleOverpassRequest(requestId)) {
             return;
         }
 
         await iconReadyPromise;
 
-        if (requestId !== mapOverpassRequestId) {
+        if (isStaleOverpassRequest(requestId)) {
             return;
         }
 
