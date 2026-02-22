@@ -63,7 +63,8 @@ const MAP_STOP_ICON_READY = (() => {
                 if (settled) return;
                 settled = true;
                 if (error) {
-                    console.warn("Stop icon preload failed for", iconUrl, ":", error);
+                    const errorDetail = error?.type || error?.message || error;
+                    console.warn("Stop icon preload failed for", iconUrl, ":", errorDetail);
                 }
                 resolve();
             };
@@ -2090,7 +2091,7 @@ async function updateOverpassMarkers() {
         await iconReadyPromise;
 
         if (isStaleOverpassRequest(requestId)) {
-            console.debug("Skipping stale map marker update for request", requestId);
+            console.debug(`Skipping stale map marker update for request ${requestId} (current: ${mapOverpassRequestId})`);
             return;
         }
 
