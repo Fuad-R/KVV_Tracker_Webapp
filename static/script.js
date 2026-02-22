@@ -66,6 +66,7 @@ const MAP_STOP_ICON_READY = (() => {
             }
             return img.decode().catch(error => {
                 console.warn("Stop icon preload failed for", img.src, ":", error);
+                return Promise.resolve();
             });
         })
     );
@@ -2078,10 +2079,6 @@ async function updateOverpassMarkers() {
             body: query
         });
         const data = await response.json();
-
-        if (isStaleOverpassRequest(requestId)) {
-            return;
-        }
 
         await iconReadyPromise;
 
