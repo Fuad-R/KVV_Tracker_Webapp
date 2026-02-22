@@ -57,6 +57,7 @@ const MAP_STOP_ICON_IMAGES = Object.values(MAP_STOP_ICONS).map(icon => {
     img.src = icon.options.iconUrl;
     return img;
 });
+MAP_STOP_ICON_IMAGES.forEach(img => img.decode?.().catch(() => {}));
 // Respect Nominatim usage policy with throttled lookups and a custom User-Agent.
 let mapCityLastRequestAt = 0;
 let mapCityFailureCount = 0;
