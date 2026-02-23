@@ -4,6 +4,7 @@ import os
 import psycopg2
 import requests
 from datetime import datetime, timedelta
+import logging
 
 TRANSIT_APP = "Transit App"
 
@@ -430,9 +431,11 @@ def lookup_stop_by_coords():
             "distance_meters": stop["distance_meters"]
         })
     except (FileNotFoundError, ValueError) as e:
-        return jsonify({"error": str(e)}), 503
+        logging.exception("Error finding nearest stop (file/value error)")
+        return jsonify({"error": "Service temporarily unavailable"}), 503
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logging.exception("Unexpected error in lookup_stop_by_coords")
+        return jsonify({"error": "An internal error has occurred"}), 500
 
 
 # ---------------- DEBUG ENDPOINTS ----------------
