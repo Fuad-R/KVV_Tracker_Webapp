@@ -30,6 +30,24 @@ def extract_search_locations(payload):
         return payload.get("locations", [])
     return payload if isinstance(payload, list) else []
 
+def extract_station_name_from_departures(departures):
+    if not departures:
+        return None
+    for departure in departures:
+        if not isinstance(departure, dict):
+            continue
+        for key in ("stop_name", "stopName", "name"):
+            value = departure.get(key)
+            if value:
+                return value
+        stop_info = departure.get("stop") or departure.get("station")
+        if isinstance(stop_info, dict):
+            for key in ("name", "stop_name", "stopName"):
+                value = stop_info.get(key)
+                if value:
+                    return value
+    return None
+
 def get_stop_id(stop_name: str):
     r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name}, timeout=10)
     r.raise_for_status()
@@ -279,8 +297,9 @@ def search_by_id():
         data = get_stop_departures(stop_id)
 
         # Use provided station name, fallback to API data
-        if not station_name:
-            station_name = data[0].get("stop_name", "Unknown station") if data else "Unknown station"
+        station_name = station_name.strip() if station_name else ""
+        if not station_name or station_name.lower() == "unknown station":
+            station_name = extract_station_name_from_departures(data) or f"Stop ID {stop_id}"
 
         now = datetime.now()
         for d in data:
