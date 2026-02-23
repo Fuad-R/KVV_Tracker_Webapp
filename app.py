@@ -63,13 +63,20 @@ def get_stop_name_by_id(stop_id: str):
         r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_id}, timeout=10)
         r.raise_for_status()
         stops = extract_search_locations(r.json())
+        fallback_name = None
         for stop in stops:
             if not isinstance(stop, dict):
                 continue
+            stop_identifier = stop.get("id") or stop.get("stop_id") or stop.get("stopId")
             for key in ("name", "stop_name", "stopName"):
                 value = stop.get(key)
                 if value:
-                    return value
+                    if stop_identifier and str(stop_identifier) == str(stop_id):
+                        return value
+                    if fallback_name is None:
+                        fallback_name = value
+        if fallback_name:
+            return fallback_name
     except requests.RequestException:
         pass
 
