@@ -1,7 +1,10 @@
 from flask import Flask, render_template, jsonify, request
+from contextlib import closing
 import os
+import psycopg2
 import requests
 from datetime import datetime, timedelta
+import logging
 
 TRANSIT_APP = "Transit App"
 
@@ -9,6 +12,10 @@ TRANSIT_APP = "Transit App"
 DEV_MODE = (os.getenv("dev") or os.getenv("DEV") or "false").strip().lower() == "true"
 BASE_URL = "https://transitapi-dev.fuadserver.uk/api" if DEV_MODE else "https://transitapi.fuadserver.uk/api"
 MAX_MINUTES = 30
+# Map stop lookup radius (300m) to match map selection requirements.
+MAP_STOP_SEARCH_RADIUS_METERS = 500
+DB_CONNECTION_PATH = "/config/db_connection.txt"
+REQUIRED_DB_SETTINGS = {"host", "port", "dbname", "user", "password"}
 
 DEBUG_PASSWORD = "fuadsux"
 #enter debug mode by typing test-dev-debug in station search
@@ -24,6 +31,24 @@ def extract_search_locations(payload):
         return payload.get("locations", [])
     return payload if isinstance(payload, list) else []
 
+def extract_station_name_from_departures(departures):
+    if not departures:
+        return None
+    for departure in departures:
+        if not isinstance(departure, dict):
+            continue
+        for key in ("stop_name", "stopName", "name"):
+            value = departure.get(key)
+            if value:
+                return value
+        stop_info = departure.get("stop") or departure.get("station")
+        if isinstance(stop_info, dict):
+            for key in ("name", "stop_name", "stopName"):
+                value = stop_info.get(key)
+                if value:
+                    return value
+    return None
+
 def get_stop_id(stop_name: str):
     r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name}, timeout=10)
     r.raise_for_status()
@@ -32,10 +57,85 @@ def get_stop_id(stop_name: str):
         return None
     return stops[0].get("id")
 
+def get_stop_name_by_id(stop_id: str):
+    if not stop_id:
+        return None
+    try:
+        r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_id}, timeout=10)
+        r.raise_for_status()
+        stops = extract_search_locations(r.json())
+        fallback_name = None
+        for stop in stops:
+            if not isinstance(stop, dict):
+                continue
+            stop_identifier = stop.get("id") or stop.get("stop_id") or stop.get("stopId")
+            for key in ("name", "stop_name", "stopName"):
+                value = stop.get(key)
+                if value:
+                    if stop_identifier and str(stop_identifier) == str(stop_id):
+                        return value
+                    if fallback_name is None:
+                        fallback_name = value
+        if fallback_name:
+            return fallback_name
+    except requests.RequestException:
+        pass
+
+    try:
+        with closing(get_db_connection()) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT stop_name FROM stops WHERE stop_id = %s LIMIT 1;", (stop_id,))
+                row = cur.fetchone()
+                if row and row[0]:
+                    return row[0]
+    except (FileNotFoundError, ValueError, psycopg2.Error):
+        return None
+    return None
+
 def get_stop_departures(stop_id: str):
     r = requests.get(f"{BASE_URL}/stops/{stop_id}", params={"detailed": "1", "delay": "1"}, timeout=10)
     r.raise_for_status()
     return r.json()
+
+def load_db_connection_config(path: str = DB_CONNECTION_PATH):
+    if not os.path.exists(path):
+        return None
+    config = {}
+    with open(path, "r", encoding="utf-8") as config_file:
+        for line in config_file:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            config[key.strip()] = value.strip()
+    return config
+
+def get_db_connection():
+    config = load_db_connection_config()
+    if not config:
+        raise FileNotFoundError(f"Database connection file not found at {DB_CONNECTION_PATH}")
+    missing_keys = REQUIRED_DB_SETTINGS - set(config.keys())
+    if missing_keys:
+        missing_list = ", ".join(sorted(missing_keys))
+        raise ValueError(f"Database connection file missing required settings: {missing_list}")
+    return psycopg2.connect(**config)
+
+def find_nearest_stop(lat: float, lon: float, max_distance_meters: int = MAP_STOP_SEARCH_RADIUS_METERS):
+    query = """
+        SELECT stop_id, stop_name, ST_Distance(location, ref_point) AS distance
+        FROM stops,
+             (SELECT ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326)::geography AS ref_point) AS reference
+        WHERE location IS NOT NULL AND ST_DWithin(location, ref_point, %(max_distance)s)
+        ORDER BY distance ASC
+        LIMIT 1;
+    """
+    with closing(get_db_connection()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, {"lat": lat, "lon": lon, "max_distance": max_distance_meters})
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {"stop_id": row[0], "stop_name": row[1], "distance_meters": float(row[2])}
 
 
 # ---------------- LINE COLORS ----------------
@@ -86,7 +186,11 @@ def line_color(mot: int, line: str) -> str:
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def index(path):
-    return render_template("index.html", app_name=TRANSIT_APP)
+    return render_template(
+        "index.html",
+        app_name=TRANSIT_APP,
+        dev_mode=DEV_MODE,
+    )
 
 
 @app.route("/sw.js")
@@ -229,8 +333,11 @@ def search_by_id():
         data = get_stop_departures(stop_id)
 
         # Use provided station name, fallback to API data
+        station_name = station_name.strip() if station_name else ""
+        if not station_name or station_name.lower() == "unknown station":
+            station_name = extract_station_name_from_departures(data)
         if not station_name:
-            station_name = data[0].get("stop_name", "Unknown station") if data else "Unknown station"
+            station_name = get_stop_name_by_id(stop_id) or f"Stop ID {stop_id}"
 
         now = datetime.now()
         for d in data:
@@ -299,6 +406,38 @@ def search_by_id():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/lookup_stop_by_coords")
+def lookup_stop_by_coords():
+    lat = request.args.get("lat")
+    lon = request.args.get("lon")
+    if lat is None or lon is None:
+        return jsonify({"error": "Latitude and longitude required"}), 400
+
+    try:
+        lat = float(lat)
+        lon = float(lon)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid coordinates"}), 400
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return jsonify({"error": "Coordinates out of range"}), 400
+
+    try:
+        stop = find_nearest_stop(lat, lon)
+        if not stop:
+            return jsonify({"error": "No nearby stop found"}), 404
+        return jsonify({
+            "stop_id": stop["stop_id"],
+            "stop_name": stop["stop_name"],
+            "distance_meters": stop["distance_meters"]
+        })
+    except (FileNotFoundError, ValueError) as e:
+        logging.exception("Error finding nearest stop (file/value error)")
+        return jsonify({"error": "Service temporarily unavailable"}), 503
+    except Exception as e:
+        logging.exception("Unexpected error in lookup_stop_by_coords")
+        return jsonify({"error": "An internal error has occurred"}), 500
+
+
 # ---------------- DEBUG ENDPOINTS ----------------
 
 @app.route("/debug/login", methods=["POST"])
@@ -313,7 +452,7 @@ def debug_login():
 def debug_update():
     # Basic check for password (simplified for debug purposes, should be token-based in real app)
     password = request.headers.get("X-Debug-Password")
-    if password != DEBUG_PASSWORD:
+    if not (password == DEBUG_PASSWORD or (DEV_MODE and password == "dev-mode")):
         return jsonify({"error": "Unauthorized"}), 401
 
     data = request.json
@@ -350,7 +489,7 @@ def debug_update():
 @app.route("/debug/clear", methods=["POST"])
 def debug_clear():
     password = request.headers.get("X-Debug-Password")
-    if password != DEBUG_PASSWORD:
+    if not (password == DEBUG_PASSWORD or (DEV_MODE and password == "dev-mode")):
         return jsonify({"error": "Unauthorized"}), 401
     
     DEBUG_OVERRIDES.clear()
@@ -358,4 +497,4 @@ def debug_clear():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=DEV_MODE)

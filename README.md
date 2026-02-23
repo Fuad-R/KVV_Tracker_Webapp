@@ -62,6 +62,14 @@ A Flask-based web application to track real-time departures of the Transit App (
    docker run -p 5000:5000 transit-tracker
    ```
 
+### Database configuration (map stop lookup)
+
+To enable coordinate-based map stop lookups, provide a PostgreSQL connection file at `/config/db_connection.txt` inside the container. Use `db_connection.txt.example` as a template for the contents and mount it when running Docker, for example:
+
+```bash
+docker run -p 5000:5000 -v /path/to/db_connection.txt:/config/db_connection.txt transit-tracker
+```
+
 ## Usage
 
 ### Station Search
@@ -71,7 +79,9 @@ Type the name of a station in the search bar to get real-time departures.
 To enter debug mode:
 1. Type `test-dev-debug` into the station search bar.
 2. Enter the debug password (default: `fuadsux`).
-3. In debug mode, you can override departure times and delays, pause updates, and access a map view.
+3. In debug mode, you can override departure times and delays, pause updates, clear overrides, reset saved app data, and access a map view.
+
+To enable dev mode automatically (including Flask debug and UI debug tools), set `DEV=true` (or `dev=true`) in the environment. Leave it unset/false in production to keep debug tools off by default.
 
 ## Project Structure
 

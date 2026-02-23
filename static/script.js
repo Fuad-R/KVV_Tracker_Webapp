@@ -1,7 +1,11 @@
 let stopName = "";
 let stopId = null;
-let debugMode = false;
-let debugPassword = localStorage.getItem("debugPassword") || "";
+const DEBUG_PASSWORD_KEY = "debugPassword";
+const appConfig = window.APP_CONFIG || {};
+const devModeEnabled = appConfig.devMode === true;
+const storedDebugPassword = localStorage.getItem(DEBUG_PASSWORD_KEY) || "";
+let debugPassword = storedDebugPassword;
+let debugMode = devModeEnabled || !!debugPassword;
 let countdown = 30;
 let countdownInterval;
 let refreshInterval;
@@ -13,12 +17,23 @@ let userMarker = null;
 let searchTimeout = null;
 let openMapPopupName = null;
 let isRefreshingMapMarkers = false;
+let mapOverpassRequestId = 0;
+const mapOverpassActiveRequests = new Set();
 const FAVORITES_KEY = 'transit_favorites';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
 const ANNOUNCEMENT_KEY = 'transit_announcement_text';
 const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
+const APP_STORAGE_KEYS = [
+    FAVORITES_KEY,
+    HOME_STATION_KEY,
+    EXPERIMENTAL_KEY,
+    DEV_LOCATION_KEY,
+    DEBUG_PASSWORD_KEY,
+    ANNOUNCEMENT_KEY,
+    ANNOUNCEMENT_SETTINGS_KEY
+];
 const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
 const MAP_CITY_CACHE = new Map();
@@ -29,12 +44,46 @@ const MAP_CITY_FAILURE_WARN_THRESHOLD = 3;
 const MAP_CITY_NOMINATIM_URL = (typeof window !== "undefined" && window.NOMINATIM_URL)
     ? window.NOMINATIM_URL
     : "https://nominatim.openstreetmap.org/reverse";
+const MAP_STOP_ICON_OPTIONS = {
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12]
+};
+const MAP_STOP_ICONS = {
+    db: L.icon({ ...MAP_STOP_ICON_OPTIONS, iconUrl: "/static/icons/db.png" }),
+    bus: L.icon({ ...MAP_STOP_ICON_OPTIONS, iconUrl: "/static/icons/busstop.png" })
+};
+const MAP_STOP_ICON_READY = (() => {
+    const preloadPromises = Object.values(MAP_STOP_ICONS).map(icon => {
+        const iconUrl = icon.options.iconUrl;
+        return new Promise(resolve => {
+            const img = new Image();
+            let settled = false;
+            const finish = (error) => {
+                if (settled) return;
+                settled = true;
+                if (error) {
+                    const errorDetail = error?.type || error?.message || error;
+                    console.warn("Stop icon preload failed for", iconUrl, ":", errorDetail);
+                    resolve(false);
+                    return;
+                }
+                resolve(true);
+            };
+            img.onload = () => finish();
+            img.onerror = (event) => finish(event);
+            img.src = iconUrl;
+            if (img.complete) {
+                finish();
+            }
+        });
+    });
+    return Promise.all(preloadPromises).then(results => results.every(Boolean));
+})();
 // Respect Nominatim usage policy with throttled lookups and a custom User-Agent.
 let mapCityLastRequestAt = 0;
 let mapCityFailureCount = 0;
 let mapCityRequestChain = Promise.resolve();
-// Keep stop matching strict enough to avoid wrong station matches while allowing map/stop coordinate drift.
-const MAP_STOP_MATCH_DISTANCE_METERS = 650;
 let isApplyingUrlState = false;
 
 function parseFiltersSegment(segment) {
@@ -190,6 +239,53 @@ function closeDebugLogin() {
     document.getElementById("debugLoginError").style.display = "none";
 }
 
+function canLeaveDevMode() {
+    return !devModeEnabled;
+}
+
+function getDebugAuthHeader() {
+    if (devModeEnabled) return "dev-mode";
+    if (debugPassword) return debugPassword;
+    return null;
+}
+
+function withDebugAuthHeaders(headers = {}) {
+    const authHeader = getDebugAuthHeader();
+    if (authHeader) {
+        headers["X-Debug-Password"] = authHeader;
+    }
+    return headers;
+}
+
+function setLeaveDebugButtonVisible(isVisible) {
+    const leaveBtn = document.getElementById("leaveDebugBtn");
+    if (leaveBtn) leaveBtn.style.display = isVisible ? "block" : "none";
+}
+
+function enableDebugUI() {
+    const updateBtn = document.getElementById("updateNowBtn");
+    if (updateBtn) updateBtn.style.display = "block";
+    const pauseBtn = document.getElementById("pauseUpdatesBtn");
+    if (pauseBtn) pauseBtn.style.display = "block";
+    const clearOverridesBtn = document.getElementById("clearOverridesBtn");
+    if (clearOverridesBtn) clearOverridesBtn.style.display = "block";
+    const resetAppDataBtn = document.getElementById("resetAppDataBtn");
+    if (resetAppDataBtn) resetAppDataBtn.style.display = "block";
+    setLeaveDebugButtonVisible(canLeaveDevMode());
+    const devLocationBtn = document.getElementById("devLocationBtn");
+    if (devLocationBtn) devLocationBtn.style.display = "block";
+
+    // Show announcement bar in dev mode
+    const announcementBar = document.getElementById("announcementBar");
+    if (announcementBar) announcementBar.style.display = "flex";
+    const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
+    if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
+    const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
+    if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
+
+    updateExperimentalUI();
+}
+
 async function loginDebug() {
     const password = document.getElementById("debugPassword").value;
     try {
@@ -202,26 +298,9 @@ async function loginDebug() {
     if (data.success) {
         debugMode = true;
         debugPassword = password;
-        localStorage.setItem("debugPassword", password);
+        localStorage.setItem(DEBUG_PASSWORD_KEY, password);
         closeDebugLogin();
-        const updateBtn = document.getElementById("updateNowBtn");
-        if (updateBtn) updateBtn.style.display = "block";
-        const pauseBtn = document.getElementById("pauseUpdatesBtn");
-        if (pauseBtn) pauseBtn.style.display = "block";
-        const leaveBtn = document.getElementById("leaveDebugBtn");
-        if (leaveBtn) leaveBtn.style.display = "block";
-        const devLocationBtn = document.getElementById("devLocationBtn");
-        if (devLocationBtn) devLocationBtn.style.display = "block";
-
-        // Show announcement bar in dev mode
-        const announcementBar = document.getElementById("announcementBar");
-        if (announcementBar) announcementBar.style.display = "flex";
-        const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
-        const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
-        if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
-
-        updateExperimentalUI();
+        enableDebugUI();
         applyFilter(); // Re-render to show edit buttons
 
         // Track debug mode login
@@ -242,9 +321,14 @@ async function loginDebug() {
 }
 
 function logoutDebug() {
+    if (devModeEnabled) {
+        showError("Dev mode is enabled via environment variable. Unset DEV/dev or restart without them to disable it.");
+        return;
+    }
+
     debugMode = false;
     debugPassword = "";
-    localStorage.removeItem("debugPassword");
+    localStorage.removeItem(DEBUG_PASSWORD_KEY);
 
     // Track debug mode logout
     if (typeof umami !== 'undefined') {
@@ -256,8 +340,11 @@ function logoutDebug() {
     if (updateBtn) updateBtn.style.display = "none";
     const pauseBtn = document.getElementById("pauseUpdatesBtn");
     if (pauseBtn) pauseBtn.style.display = "none";
-    const leaveBtn = document.getElementById("leaveDebugBtn");
-    if (leaveBtn) leaveBtn.style.display = "none";
+    const clearOverridesBtn = document.getElementById("clearOverridesBtn");
+    if (clearOverridesBtn) clearOverridesBtn.style.display = "none";
+    const resetAppDataBtn = document.getElementById("resetAppDataBtn");
+    if (resetAppDataBtn) resetAppDataBtn.style.display = "none";
+    setLeaveDebugButtonVisible(false);
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "none";
 
@@ -283,6 +370,48 @@ function logoutDebug() {
 
     // Re-render departures to remove edit buttons
     applyFilter();
+}
+
+async function clearDebugOverrides() {
+    if (!debugMode) return;
+    const authHeader = getDebugAuthHeader();
+    if (!authHeader) {
+        showError("Debug authentication not available.");
+        return;
+    }
+    if (!confirm("Clear all debug overrides?")) return;
+    try {
+        const res = await fetch("/debug/clear", {
+            method: "POST",
+            headers: {
+                "X-Debug-Password": authHeader
+            }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            showError(data.error || "Failed to clear overrides.");
+            return;
+        }
+        updateNow();
+        if (typeof umami !== 'undefined') {
+            umami.track('debug-clear-overrides');
+        }
+    } catch (e) {
+        console.error(e);
+        showError("Failed to clear overrides.");
+    }
+}
+
+function resetAppData() {
+    if (!debugMode) return;
+    if (!confirm("Reset ALL saved app data? This cannot be undone.")) return;
+    APP_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+    debugPassword = "";
+    debugMode = devModeEnabled;
+    if (typeof umami !== 'undefined') {
+        umami.track('debug-reset-app-data');
+    }
+    window.location.reload();
 }
 
 function editAnnouncement() {
@@ -525,10 +654,9 @@ async function saveDebugOverride() {
     try {
         const res = await fetch("/debug/update", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Debug-Password": debugPassword
-            },
+            headers: withDebugAuthHeaders({
+                "Content-Type": "application/json"
+            }),
             body: JSON.stringify({
                 stop_id,
                 line,
@@ -562,10 +690,9 @@ async function clearDebugOverride() {
     try {
         const res = await fetch("/debug/update", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Debug-Password": debugPassword
-            },
+            headers: withDebugAuthHeaders({
+                "Content-Type": "application/json"
+            }),
             body: JSON.stringify({
                 stop_id,
                 line,
@@ -1709,6 +1836,31 @@ async function resolveMapSearchContext(stationName, markerCoords = null) {
     return { lookupName: appendCityToStopName(baseName, cityName), cityName };
 }
 
+async function lookupStopByCoords(lat, lon) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+        const res = await fetch(`/lookup_stop_by_coords?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`, {
+            signal: controller.signal
+        });
+        const result = await res.json();
+        if (!res.ok || result.error) {
+            throw new Error(result.error || "Failed to find nearby stop.");
+        }
+        return result;
+    } catch (error) {
+        if (error.name === "AbortError") {
+            throw new Error("Stop lookup timed out.");
+        }
+        if (error instanceof TypeError) {
+            throw new Error(`Network error while contacting the server: ${error.message}`);
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
 function buildMapPopupDeparturesHtml(departures) {
     if (!departures || departures.length === 0) {
         return '<div class="map-popup-empty">No departures found.</div>';
@@ -1848,7 +2000,10 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
 
     const { lookupName, cityName } = await resolveMapSearchContext(stationName, markerCoords);
     applyMapCityInput(cityName);
-    const cacheKey = (lookupName || "").toLowerCase();
+    const hasCoords = markerCoords && Number.isFinite(markerCoords.lat) && Number.isFinite(markerCoords.lon);
+    const cacheKey = hasCoords
+        ? `${markerCoords.lat},${markerCoords.lon}`
+        : (lookupName || stationName || "").toLowerCase();
     const cached = MAP_POPUP_CACHE.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < MAP_POPUP_CACHE_TTL_MS) {
         container.innerHTML = cached.html;
@@ -1862,59 +2017,31 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
     container.innerHTML = '<div class="map-popup-loading">Loading departures...</div>';
 
     try {
-        const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`);
-        const result = await res.json();
-        if (!res.ok || result.error) {
-            throw new Error(result.error || "Failed to load departures.");
-        }
-
-        let departuresToRender = result.departures;
-        if (markerCoords && Number.isFinite(markerCoords.lat) && Number.isFinite(markerCoords.lon)) {
-            const nearbyCandidates = [];
-            if (Array.isArray(result.all_stations)) {
-                nearbyCandidates.push(...result.all_stations);
+        let departuresToRender = [];
+        if (hasCoords) {
+            const lookupResult = await lookupStopByCoords(markerCoords.lat, markerCoords.lon);
+            const nearestStopId = lookupResult.stop_id;
+            if (!nearestStopId) {
+                throw new Error("No stop found at this location.");
             }
-            if (result.matched_stop) {
-                nearbyCandidates.push(result.matched_stop);
+            const nearestStationName = lookupResult.stop_name || stationName || lookupName || String(nearestStopId);
+            const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
+            const byIdResult = await byIdResponse.json();
+            if (!byIdResponse.ok || byIdResult.error) {
+                throw new Error(byIdResult.error || `Failed to load departures for stop ${nearestStopId}.`);
             }
-            const uniqueCandidates = Object.values(
-                nearbyCandidates.reduce((acc, station) => {
-                    const key = station?.id || station?.name;
-                    if (key && !acc[key]) acc[key] = station;
-                    return acc;
-                }, {})
-            );
-
-            let nearestStation = null;
-            let nearestDistance = Infinity;
-            uniqueCandidates.forEach((station) => {
-                const coords = extractStationCoordinates(station);
-                if (!coords) return;
-                const distanceMeters = calculateDistanceMeters(
-                    markerCoords.lat,
-                    markerCoords.lon,
-                    coords.lat,
-                    coords.lon
-                );
-                if (distanceMeters < nearestDistance) {
-                    nearestDistance = distanceMeters;
-                    nearestStation = station;
-                }
-            });
-
-            if (nearestStation && nearestDistance <= MAP_STOP_MATCH_DISTANCE_METERS) {
-                const nearestStopId = nearestStation.id;
-                const currentStopId = result.matched_stop?.id;
-                if (nearestStopId && nearestStopId !== currentStopId) {
-                    const nearestStationName = nearestStation.name || stationName || stopName || String(nearestStopId);
-                    const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
-                    const byIdResult = await byIdResponse.json();
-                    if (!byIdResponse.ok || byIdResult.error) {
-                        throw new Error(byIdResult.error || `Failed to load departures for nearest stop ${nearestStopId}.`);
-                    }
-                    departuresToRender = byIdResult.departures || [];
-                }
+            departuresToRender = byIdResult.departures || [];
+        } else {
+            const fallbackName = lookupName || stationName || "";
+            if (!fallbackName) {
+                throw new Error("Cannot load departures: stop name is required.");
             }
+            const res = await fetch(`/search?stop=${encodeURIComponent(fallbackName)}`);
+            const result = await res.json();
+            if (!res.ok || result.error) {
+                throw new Error(result.error || "Failed to load departures.");
+            }
+            departuresToRender = result.departures || [];
         }
 
         const html = buildMapPopupDeparturesHtml(departuresToRender);
@@ -1930,9 +2057,25 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
     }
 }
 
+function isStaleMapOverpassRequest(requestId) {
+    return requestId !== mapOverpassRequestId;
+}
+
+function logStaleMapOverpassRequest(requestId) {
+    console.debug(`Skipping stale map marker update for request ${requestId} (latest: ${mapOverpassRequestId})`);
+}
+
+function nextMapOverpassRequestId() {
+    mapOverpassRequestId += 1;
+    return mapOverpassRequestId;
+}
+
 async function updateOverpassMarkers() {
     const loadingIndicator = document.getElementById('mapLoading');
+    const requestId = nextMapOverpassRequestId();
+    mapOverpassActiveRequests.add(requestId);
     if (loadingIndicator) loadingIndicator.style.display = 'flex';
+    const iconReadyPromise = MAP_STOP_ICON_READY;
 
     const bounds = map.getBounds();
     const sw = bounds.getSouthWest();
@@ -1955,6 +2098,13 @@ async function updateOverpassMarkers() {
             body: query
         });
         const data = await response.json();
+
+        if (isStaleMapOverpassRequest(requestId)) {
+            logStaleMapOverpassRequest(requestId);
+            return;
+        }
+
+        await iconReadyPromise;
 
         const pendingPopupName = openMapPopupName;
         isRefreshingMapMarkers = true;
@@ -2012,17 +2162,8 @@ async function updateOverpassMarkers() {
             const info = stopsByName[name];
             const avgLat = info.latSum / info.count;
             const avgLon = info.lonSum / info.count;
-            
-            const iconSrc = info.isDB ? '/static/icons/db.png' : '/static/icons/busstop.png';
-            
-            // Custom station icon
-            const stationIcon = L.icon({
-                iconUrl: iconSrc,
-                iconSize: [24, 24],
-                iconAnchor: [12, 12],
-                popupAnchor: [0, -12]
-            });
 
+            const stationIcon = info.isDB ? MAP_STOP_ICONS.db : MAP_STOP_ICONS.bus;
             const marker = L.marker([avgLat, avgLon], { icon: stationIcon });
             
             const popupContent = document.createElement('div');
@@ -2065,8 +2206,11 @@ async function updateOverpassMarkers() {
     } catch (error) {
         console.error('Error fetching Overpass data:', error);
     } finally {
-        isRefreshingMapMarkers = false;
-        if (loadingIndicator) loadingIndicator.style.display = 'none';
+        mapOverpassActiveRequests.delete(requestId);
+        isRefreshingMapMarkers = mapOverpassActiveRequests.size > 0;
+        if (mapOverpassActiveRequests.size === 0 && loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
     }
 }
 
@@ -2079,9 +2223,18 @@ async function selectStationFromMap(name, lat, lon) {
     switchTab('departures');
     const { lookupName, cityName } = await resolveMapSearchContext(name, { lat, lon });
     applyMapCityInput(cityName);
-    document.getElementById('stopInput').value = lookupName || name;
-    toggleClearButton();
-    searchStop();
+    try {
+        const lookupResult = await lookupStopByCoords(lat, lon);
+        const resolvedStopId = lookupResult.stop_id;
+        if (!resolvedStopId) {
+            throw new Error("No stop found at this location.");
+        }
+        const resolvedName = lookupResult.stop_name || lookupName || name || String(resolvedStopId);
+        quickSearchById(resolvedStopId, resolvedName);
+    } catch (error) {
+        console.error("Error selecting map stop:", error);
+        showError("No nearby stop found for this map location.");
+    }
 }
 
 function locateUser() {
@@ -2251,25 +2404,9 @@ window.addEventListener("DOMContentLoaded", function() {
         document.getElementById("announcementText").textContent = savedAnnouncement;
     }
 
-    // Auto-login if password is saved
-    if (debugPassword) {
-        debugMode = true;
-        const updateBtn = document.getElementById("updateNowBtn");
-        if (updateBtn) updateBtn.style.display = "block";
-        const pauseBtn = document.getElementById("pauseUpdatesBtn");
-        if (pauseBtn) pauseBtn.style.display = "block";
-        const leaveBtn = document.getElementById("leaveDebugBtn");
-        if (leaveBtn) leaveBtn.style.display = "block";
-        const devLocationBtn = document.getElementById("devLocationBtn");
-        if (devLocationBtn) devLocationBtn.style.display = "block";
-
-        // Show announcement bar in dev mode
-        const announcementBar = document.getElementById("announcementBar");
-        if (announcementBar) announcementBar.style.display = "flex";
-        const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
-
-        updateExperimentalUI();
+    // Auto-enable debug UI if dev mode is enabled or a password is saved
+    if (debugMode) {
+        enableDebugUI();
     }
 
     const urlState = getUrlStateFromPath();

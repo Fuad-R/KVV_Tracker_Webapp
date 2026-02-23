@@ -190,6 +190,8 @@
                 <div style="display: flex; gap: 10px; align-items: center;">
                     <button id="updateNowBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px; background: #2e7d32;" onclick="updateNow()">Update Now</button>
                     <button id="pauseUpdatesBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px;" onclick="togglePauseUpdates()">Pause Updates</button>
+                    <button id="clearOverridesBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px; background: #b35a00;" onclick="clearDebugOverrides()">Clear Overrides</button>
+                    <button id="resetAppDataBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px; background: #c62828;" onclick="resetAppData()">Reset App Data</button>
                     <button id="devLocationBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px; background: #0b6b3a;" onclick="openDevLocation()">Set Dev Location</button>
                     <button id="leaveDebugBtn" class="search-btn" style="display: none; padding: 6px 12px; font-size: 12px; background: #666;" onclick="logoutDebug()">Leave Dev Mode</button>
                     <div class="countdown-badge" id="countdown">--</div>
@@ -326,9 +328,14 @@
     </div>
 </div>
 
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="/static/script.js"></script>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+        window.APP_CONFIG = {
+            devMode: {{ dev_mode | tojson }}
+        };
+    </script>
+    <script src="/static/script.js"></script>
 <script src="/static/theme.js"></script>
 <script>
     if ('serviceWorker' in navigator) {
@@ -341,4 +348,3 @@
 </script>
 </body>
 </html>
-
