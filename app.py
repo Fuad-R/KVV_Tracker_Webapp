@@ -56,6 +56,41 @@ def get_stop_id(stop_name: str):
         return None
     return stops[0].get("id")
 
+def get_stop_name_by_id(stop_id: str):
+    if not stop_id:
+        return None
+    try:
+        r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_id}, timeout=10)
+        r.raise_for_status()
+        stops = extract_search_locations(r.json())
+        fallback_name = None
+        for stop in stops:
+            if not isinstance(stop, dict):
+                continue
+            stop_identifier = stop.get("id") or stop.get("stop_id") or stop.get("stopId")
+            for key in ("name", "stop_name", "stopName"):
+                value = stop.get(key)
+                if value:
+                    if stop_identifier and str(stop_identifier) == str(stop_id):
+                        return value
+                    if fallback_name is None:
+                        fallback_name = value
+        if fallback_name:
+            return fallback_name
+    except requests.RequestException:
+        pass
+
+    try:
+        with closing(get_db_connection()) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT stop_name FROM stops WHERE stop_id = %s LIMIT 1;", (stop_id,))
+                row = cur.fetchone()
+                if row and row[0]:
+                    return row[0]
+    except (FileNotFoundError, ValueError, psycopg2.Error):
+        return None
+    return None
+
 def get_stop_departures(stop_id: str):
     r = requests.get(f"{BASE_URL}/stops/{stop_id}", params={"detailed": "1", "delay": "1"}, timeout=10)
     r.raise_for_status()
@@ -299,7 +334,9 @@ def search_by_id():
         # Use provided station name, fallback to API data
         station_name = station_name.strip() if station_name else ""
         if not station_name or station_name.lower() == "unknown station":
-            station_name = extract_station_name_from_departures(data) or f"Stop ID {stop_id}"
+            station_name = extract_station_name_from_departures(data)
+        if not station_name:
+            station_name = get_stop_name_by_id(stop_id) or f"Stop ID {stop_id}"
 
         now = datetime.now()
         for d in data:
