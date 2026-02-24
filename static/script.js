@@ -25,6 +25,9 @@ const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
 const ANNOUNCEMENT_KEY = 'transit_announcement_text';
 const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
+const NOTIFICATIONS_API_URL = devModeEnabled
+    ? 'https://transitapi-dev.fuadserver.uk/api/current_notifs'
+    : 'https://transitapi.fuadserver.uk/api/current_notifs';
 const APP_STORAGE_KEYS = [
     FAVORITES_KEY,
     HOME_STATION_KEY,
@@ -348,13 +351,20 @@ function logoutDebug() {
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "none";
 
-    // Hide announcement bar when leaving dev mode
+    // Hide announcement bar when leaving dev mode (unless there are API notifications)
     const announcementBar = document.getElementById("announcementBar");
     if (announcementBar) announcementBar.style.display = "none";
     const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
     if (editAnnouncementBtn) editAnnouncementBtn.style.display = "none";
     const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
     if (announcementSettingsBtn) announcementSettingsBtn.style.display = "none";
+
+    // Re-fetch notifications to update announcement bar visibility
+    if (stopId) {
+        fetchStopNotifications(stopId).then(notifications => {
+            updateAnnouncementBar(notifications);
+        });
+    }
 
     updateExperimentalUI();
 
@@ -556,6 +566,58 @@ function updateExperimentalUI() {
 
     if (devLocationBtn) {
         devLocationBtn.style.display = debugMode ? "block" : "none";
+    }
+}
+
+async function fetchStopNotifications(stopIdForNotifs) {
+    if (!stopIdForNotifs) return [];
+    try {
+        const res = await fetch(`${NOTIFICATIONS_API_URL}?stopID=${encodeURIComponent(stopIdForNotifs)}`);
+        if (!res.ok) return [];
+        const notifications = await res.json();
+        if (Array.isArray(notifications) && notifications.length > 0) {
+            // Extract text from notification objects if needed
+            return notifications.map(n => {
+                if (typeof n === 'string') return n;
+                // Handle object notifications with common text properties
+                if (typeof n === 'object' && n !== null) {
+                    return n.text || n.message || n.title || n.content || n.description || null;
+                }
+                return null;
+            }).filter(text => text != null);
+        }
+    } catch (e) {
+        console.error("Error fetching notifications:", e);
+    }
+    return [];
+}
+
+function updateAnnouncementBar(notifications) {
+    const announcementBar = document.getElementById("announcementBar");
+    const announcementText = document.getElementById("announcementText");
+    const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
+    const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
+    
+    if (notifications && notifications.length > 0) {
+        // Join notifications with a separator
+        const notificationText = notifications.join(" • ");
+        announcementText.textContent = notificationText;
+        announcementBar.style.display = "flex";
+        // Hide edit/settings buttons when showing API notifications (not user-editable)
+        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "none";
+        if (announcementSettingsBtn) announcementSettingsBtn.style.display = debugMode ? "flex" : "none";
+    } else if (debugMode) {
+        // In dev mode, show the bar with saved announcement text if no notifications
+        const savedAnnouncement = localStorage.getItem(ANNOUNCEMENT_KEY);
+        if (savedAnnouncement) {
+            announcementText.textContent = savedAnnouncement;
+        }
+        announcementBar.style.display = "flex";
+        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
+        if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
+    } else {
+        // Hide bar when no notifications and not in dev mode
+        announcementBar.style.display = "none";
     }
 }
 
@@ -949,6 +1011,13 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         updateFavoriteButton();
         updateHomeButton();
         syncUrlFromState(!isUserSearch);
+
+        // Fetch and display notifications for this stop
+        const currentStopId = stopId || (result.matched_stop && result.matched_stop.id);
+        if (currentStopId) {
+            const notifications = await fetchStopNotifications(currentStopId);
+            updateAnnouncementBar(notifications);
+        }
     } catch (e) {
         console.error(e);
     } finally {
@@ -1003,6 +1072,12 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
         updateFavoriteButton();
         updateHomeButton();
         syncUrlFromState(!isUserSearch);
+
+        // Fetch and display notifications for this stop
+        if (stopId) {
+            const notifications = await fetchStopNotifications(stopId);
+            updateAnnouncementBar(notifications);
+        }
     } catch (e) {
         console.error(e);
     } finally {
