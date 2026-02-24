@@ -574,7 +574,15 @@ async function fetchStopNotifications(stopIdForNotifs) {
         if (!res.ok) return [];
         const notifications = await res.json();
         if (Array.isArray(notifications) && notifications.length > 0) {
-            return notifications;
+            // Extract text from notification objects if needed
+            return notifications.map(n => {
+                if (typeof n === 'string') return n;
+                // Handle object notifications with common text properties
+                if (typeof n === 'object' && n !== null) {
+                    return n.text || n.message || n.title || n.content || n.description || String(n);
+                }
+                return String(n);
+            }).filter(text => text && text !== '[object Object]');
         }
     } catch (e) {
         console.error("Error fetching notifications:", e);
