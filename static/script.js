@@ -25,7 +25,9 @@ const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
 const ANNOUNCEMENT_KEY = 'transit_announcement_text';
 const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
-const NOTIFICATIONS_API_URL = 'https://transitapi-dev.fuadserver.uk/api/current_notifs';
+const NOTIFICATIONS_API_URL = devModeEnabled
+    ? 'https://transitapi-dev.fuadserver.uk/api/current_notifs'
+    : 'https://transitapi.fuadserver.uk/api/current_notifs';
 const APP_STORAGE_KEYS = [
     FAVORITES_KEY,
     HOME_STATION_KEY,
