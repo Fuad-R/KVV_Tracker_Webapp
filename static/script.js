@@ -579,10 +579,10 @@ async function fetchStopNotifications(stopIdForNotifs) {
                 if (typeof n === 'string') return n;
                 // Handle object notifications with common text properties
                 if (typeof n === 'object' && n !== null) {
-                    return n.text || n.message || n.title || n.content || n.description || String(n);
+                    return n.text || n.message || n.title || n.content || n.description || null;
                 }
-                return String(n);
-            }).filter(text => text && text !== '[object Object]');
+                return null;
+            }).filter(text => text != null);
         }
     } catch (e) {
         console.error("Error fetching notifications:", e);
