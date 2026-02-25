@@ -82,7 +82,7 @@ const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
 const NOTIFICATION_SETTINGS_DEFAULTS = {
-    widthPercent: 100,
+    heightPercent: 100,
     textSizePx: 14,
     scrollDuration: null
 };
@@ -538,11 +538,11 @@ function getCurrentNotificationScrollDuration() {
 function openNotificationEdit() {
     const popup = document.getElementById("notificationEditPopup");
     if (!popup) return;
-    const widthInput = document.getElementById("notificationWidth");
+    const heightInput = document.getElementById("notificationHeight");
     const textSizeInput = document.getElementById("notificationTextSize");
     const scrollInput = document.getElementById("notificationScrollDuration");
     const currentDuration = notificationSettings.scrollDuration ?? getCurrentNotificationScrollDuration();
-    if (widthInput) widthInput.value = notificationSettings.widthPercent;
+    if (heightInput) heightInput.value = notificationSettings.heightPercent;
     if (textSizeInput) textSizeInput.value = notificationSettings.textSizePx;
     if (scrollInput) scrollInput.value = currentDuration ?? "";
     popup.style.display = "block";
@@ -554,12 +554,12 @@ function closeNotificationEdit() {
 }
 
 function saveNotificationEdit() {
-    const widthValue = Number(document.getElementById("notificationWidth").value);
+    const heightValue = Number(document.getElementById("notificationHeight").value);
     const textSizeValue = Number(document.getElementById("notificationTextSize").value);
     const scrollValue = Number(document.getElementById("notificationScrollDuration").value);
-    notificationSettings.widthPercent = Number.isFinite(widthValue) && widthValue > 0
-        ? widthValue
-        : NOTIFICATION_SETTINGS_DEFAULTS.widthPercent;
+    notificationSettings.heightPercent = Number.isFinite(heightValue) && heightValue > 0
+        ? heightValue
+        : NOTIFICATION_SETTINGS_DEFAULTS.heightPercent;
     notificationSettings.textSizePx = Number.isFinite(textSizeValue) && textSizeValue > 0
         ? textSizeValue
         : NOTIFICATION_SETTINGS_DEFAULTS.textSizePx;
@@ -582,12 +582,11 @@ function applyNotificationSizing() {
     const notificationBar = document.getElementById("notificationBar");
     const notificationText = document.getElementById("notificationText");
     if (!notificationBar || !notificationText) return;
-    if (notificationSettings.widthPercent !== NOTIFICATION_SETTINGS_DEFAULTS.widthPercent) {
-        notificationBar.style.width = `${notificationSettings.widthPercent}%`;
-        notificationBar.style.margin = "0 auto";
+    if (notificationSettings.heightPercent !== NOTIFICATION_SETTINGS_DEFAULTS.heightPercent) {
+        const scale = notificationSettings.heightPercent / 100;
+        notificationBar.style.setProperty("--notification-padding-scale", scale.toString());
     } else {
-        notificationBar.style.width = "";
-        notificationBar.style.margin = "";
+        notificationBar.style.removeProperty("--notification-padding-scale");
     }
     if (notificationSettings.textSizePx !== NOTIFICATION_SETTINGS_DEFAULTS.textSizePx) {
         notificationText.style.fontSize = `${notificationSettings.textSizePx}px`;
