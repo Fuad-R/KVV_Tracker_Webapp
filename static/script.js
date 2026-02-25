@@ -896,7 +896,15 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         }
 
         // Fetch notifications for this stop
-        fetchNotifications(stopId);
+        if (Array.isArray(result.notifications)) {
+            if (result.notifications.length > 0) {
+                displayNotifications(result.notifications);
+            } else {
+                hideNotificationBar();
+            }
+        } else {
+            fetchNotifications(stopId);
+        }
 
         // Handle multiple stations
         if (result.all_stations) {
@@ -962,7 +970,15 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
         stopName = result.station_name;
 
         // Fetch notifications for this stop
-        fetchNotifications(stopId);
+        if (Array.isArray(result.notifications)) {
+            if (result.notifications.length > 0) {
+                displayNotifications(result.notifications);
+            } else {
+                hideNotificationBar();
+            }
+        } else {
+            fetchNotifications(stopId);
+        }
 
         lastDepartures = result.departures;
         applyFilter();
