@@ -130,6 +130,14 @@ def get_stop_departures(stop_id: str):
     r.raise_for_status()
     return result
 
+def get_stop_notifications(stop_id: str):
+    dev_log("API", f"GET {BASE_URL}/current_notifs", {"stopID": stop_id})
+    r = requests.get(f"{BASE_URL}/current_notifs", params={"stopID": stop_id}, timeout=10)
+    result = r.json()
+    dev_log("API-RESPONSE", f"current_notifs returned {r.status_code}", {"notifications": len(result) if isinstance(result, list) else 0})
+    r.raise_for_status()
+    return result
+
 def load_db_connection_config(path: str = DB_CONNECTION_PATH):
     if not os.path.exists(path):
         return None
@@ -282,6 +290,11 @@ def search():
 
         # Get departures
         data = get_stop_departures(stop_id)
+        notifications = None
+        try:
+            notifications = get_stop_notifications(stop_id)
+        except (requests.RequestException, ValueError) as e:
+            dev_log("API-ERROR", "Failed to fetch current_notifs", {"stop_id": stop_id, "error": str(e)})
 
         # Add color, stop_id & formatted departure
         now = datetime.now()
@@ -348,7 +361,8 @@ def search():
             "station_name": station_name_actual,
             "departures": data,
             "all_stations": stops if len(stops) > 1 else None,
-            "matched_stop": stops[0]
+            "matched_stop": stops[0],
+            "notifications": notifications
         }
         if modified:
             response_data["info"] = "Error searching for exact match, displaying closest match"
@@ -372,6 +386,11 @@ def search_by_id():
 
     try:
         data = get_stop_departures(stop_id)
+        notifications = None
+        try:
+            notifications = get_stop_notifications(stop_id)
+        except (requests.RequestException, ValueError) as e:
+            dev_log("API-ERROR", "Failed to fetch current_notifs", {"stop_id": stop_id, "error": str(e)})
 
         # Use provided station name, fallback to API data
         station_name = station_name.strip() if station_name else ""
@@ -440,7 +459,8 @@ def search_by_id():
 
         return jsonify({
             "station_name": station_name,
-            "departures": data
+            "departures": data,
+            "notifications": notifications
         })
 
     except Exception as e:
