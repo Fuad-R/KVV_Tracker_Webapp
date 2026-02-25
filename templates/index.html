@@ -62,7 +62,7 @@
             <span id="notificationText" class="notification-text"></span>
         </div>
         {% if dev_mode %}
-        <button class="notification-edit-btn debug-edit-btn" onclick="openNotificationEdit()" title="Edit notification bar">✎</button>
+        <button class="notification-edit-btn" onclick="event.stopPropagation(); openNotificationEdit()" title="Edit notification bar">✎</button>
         {% endif %}
     </div>
 
