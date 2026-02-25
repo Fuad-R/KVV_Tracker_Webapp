@@ -23,9 +23,6 @@ const FAVORITES_KEY = 'transit_favorites';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
-const NOTIFICATIONS_API_URL = devModeEnabled
-    ? 'https://transitapi-dev.fuadserver.uk/api/current_notifs'
-    : 'https://transitapi.fuadserver.uk/api/current_notifs';
 const APP_STORAGE_KEYS = [
     FAVORITES_KEY,
     HOME_STATION_KEY,
@@ -339,11 +336,6 @@ function logoutDebug() {
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "none";
 
-    // Re-fetch notifications to update announcement bar visibility
-    if (stopId) {
-        displayNotificationsForStop(stopId);
-    }
-
     updateExperimentalUI();
 
     // If updates were paused, resume them
@@ -445,80 +437,6 @@ function updateExperimentalUI() {
     if (devLocationBtn) {
         devLocationBtn.style.display = debugMode ? "block" : "none";
     }
-}
-
-// ------------------ NOTIFICATION DISPLAY ------------------
-
-/**
- * Fetches notifications from the API for a given stop ID.
- * Returns an array of notification text strings, or an empty array if none found.
- */
-async function fetchStopNotifications(stopIdForNotifs) {
-    if (!stopIdForNotifs) return null;
-    try {
-        const res = await fetch(`${NOTIFICATIONS_API_URL}?stopID=${encodeURIComponent(stopIdForNotifs)}`);
-        if (!res.ok) return null;
-        const notifications = await res.json();
-        
-        // Return null if response is empty or not an array
-        if (!Array.isArray(notifications) || notifications.length === 0) {
-            return null;
-        }
-        
-        // Extract text from notification objects
-        const notificationTexts = notifications.map(n => {
-            if (typeof n === 'string') return n;
-            if (typeof n === 'object' && n !== null) {
-                return n.text || n.message || n.title || n.content || n.description || null;
-            }
-            return null;
-        }).filter(text => text != null);
-        
-        // Return null if no valid notification texts were found
-        return notificationTexts.length > 0 ? notificationTexts : null;
-    } catch (e) {
-        console.error("Error fetching notifications:", e);
-        return null;
-    }
-}
-
-/**
- * Updates the yellow announcement banner at the top of the page.
- * Shows the banner with notification text if notifications are provided (not null).
- * Hides the banner when no notifications are available.
- */
-function updateAnnouncementBar(notifications) {
-    const announcementBar = document.getElementById("announcementBar");
-    const announcementText = document.getElementById("announcementText");
-    
-    // If notifications are returned (not null), display them in the yellow banner
-    if (notifications !== null && notifications.length > 0) {
-        // Join multiple notifications with a separator
-        const notificationText = notifications.join(" • ");
-        announcementText.textContent = notificationText;
-        announcementBar.style.display = "flex";
-    } else {
-        // Hide bar when no notifications
-        announcementBar.style.display = "none";
-    }
-}
-
-/**
- * Main function to handle notification display after a stop search.
- * Call this after a stop name has been searched and the stop ID has been obtained.
- * Queries the notification API and displays results in the yellow banner if not null.
- */
-async function displayNotificationsForStop(stopIdForNotifs) {
-    if (!stopIdForNotifs) {
-        updateAnnouncementBar(null);
-        return;
-    }
-    
-    // Query the notification API with the stop ID
-    const notifications = await fetchStopNotifications(stopIdForNotifs);
-    
-    // Update the announcement bar - will show yellow banner if notifications are not null
-    updateAnnouncementBar(notifications);
 }
 
 function openDebugEdit(stop_id, line, direction, stable_scheduled_time, minutes, delay) {
@@ -911,10 +829,6 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         updateFavoriteButton();
         updateHomeButton();
         syncUrlFromState(!isUserSearch);
-
-        // Fetch and display notifications for this stop (after stop ID is grabbed)
-        const currentStopId = stopId || (result.matched_stop && result.matched_stop.id);
-        await displayNotificationsForStop(currentStopId);
     } catch (e) {
         console.error(e);
     } finally {
@@ -969,9 +883,6 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
         updateFavoriteButton();
         updateHomeButton();
         syncUrlFromState(!isUserSearch);
-
-        // Fetch and display notifications for this stop (after stop ID is grabbed)
-        await displayNotificationsForStop(stopId);
     } catch (e) {
         console.error(e);
     } finally {
