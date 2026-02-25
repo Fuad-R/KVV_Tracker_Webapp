@@ -258,13 +258,15 @@ body.dark-mode .moon-icon {
     overflow: hidden;
     position: relative;
     z-index: 99;
+    --notification-padding-scale: 1;
 }
 
 .notification-bar-content {
-    display: flex;
+    display: inline-flex;
     white-space: nowrap;
     animation: scroll-left 20s linear infinite;
-    padding: 10px 0;
+    padding: calc(10px * var(--notification-padding-scale, 1)) 0;
+    padding-left: 100%;
 }
 
 .notification-bar.notification-bar-editable .notification-bar-content {
@@ -273,7 +275,6 @@ body.dark-mode .moon-icon {
 
 .notification-text {
     display: inline-block;
-    padding-left: 100%;
     font-weight: 600;
     font-size: 14px;
 }
