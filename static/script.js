@@ -6,6 +6,64 @@ const devModeEnabled = appConfig.devMode === true;
 const storedDebugPassword = localStorage.getItem(DEBUG_PASSWORD_KEY) || "";
 let debugPassword = storedDebugPassword;
 let debugMode = devModeEnabled || !!debugPassword;
+
+// ================== DEBUG LOGGING ==================
+// Debug logging utility - only active in dev mode
+const DevLog = {
+    _enabled: devModeEnabled,
+    _formatTimestamp: () => new Date().toISOString().slice(11, 23),
+    _log: (category, message, data = null) => {
+        if (!DevLog._enabled) return;
+        const timestamp = DevLog._formatTimestamp();
+        const prefix = `[${timestamp}] [${category}]`;
+        if (data !== null) {
+            console.log(`%c${prefix}%c ${message}`, 'color: #0088cc; font-weight: bold', 'color: inherit', data);
+        } else {
+            console.log(`%c${prefix}%c ${message}`, 'color: #0088cc; font-weight: bold', 'color: inherit');
+        }
+    },
+    api: (endpoint, method = 'GET', params = null) => {
+        DevLog._log('API', `${method} ${endpoint}`, params);
+    },
+    apiResponse: (endpoint, status, data = null) => {
+        const statusColor = status >= 200 && status < 300 ? '#2e7d32' : '#c62828';
+        if (!DevLog._enabled) return;
+        const timestamp = DevLog._formatTimestamp();
+        console.log(
+            `%c[${timestamp}] [API-RESPONSE]%c ${endpoint} %c[${status}]`,
+            'color: #0088cc; font-weight: bold',
+            'color: inherit',
+            `color: ${statusColor}; font-weight: bold`,
+            data
+        );
+    },
+    notification: (action, data = null) => {
+        DevLog._log('NOTIFICATION', action, data);
+    },
+    state: (action, data = null) => {
+        DevLog._log('STATE', action, data);
+    },
+    filter: (action, data = null) => {
+        DevLog._log('FILTER', action, data);
+    },
+    ui: (action, data = null) => {
+        DevLog._log('UI', action, data);
+    },
+    map: (action, data = null) => {
+        DevLog._log('MAP', action, data);
+    },
+    storage: (action, data = null) => {
+        DevLog._log('STORAGE', action, data);
+    },
+    location: (action, data = null) => {
+        DevLog._log('LOCATION', action, data);
+    },
+    error: (category, message, error = null) => {
+        if (!DevLog._enabled) return;
+        const timestamp = DevLog._formatTimestamp();
+        console.error(`%c[${timestamp}] [${category}-ERROR]%c ${message}`, 'color: #c62828; font-weight: bold', 'color: inherit', error);
+    }
+};
 let countdown = 30;
 let countdownInterval;
 let refreshInterval;
@@ -144,11 +202,13 @@ function syncUrlFromState(replace = false) {
 
     if (window.location.pathname === targetPath && !replace) return;
     const stateMethod = replace ? "replaceState" : "pushState";
+    DevLog.state(`URL sync: ${stateMethod}`, { from: window.location.pathname, to: targetPath });
     window.history[stateMethod]({}, "", targetPath);
 }
 
 function applyUrlState() {
     const state = getUrlStateFromPath();
+    DevLog.state('Applying URL state', state);
     isApplyingUrlState = true;
     try {
         if (state.mode === "map") {
@@ -277,16 +337,19 @@ function enableDebugUI() {
 async function loginDebug() {
     const password = document.getElementById("debugPassword").value;
     try {
+        DevLog.api('/debug/login', 'POST');
         const res = await fetch("/debug/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ password })
         });
         const data = await res.json();
+        DevLog.apiResponse('/debug/login', res.status, { success: data.success });
     if (data.success) {
         debugMode = true;
         debugPassword = password;
         localStorage.setItem(DEBUG_PASSWORD_KEY, password);
+        DevLog.state('Debug mode enabled via login');
         closeDebugLogin();
         enableDebugUI();
         applyFilter(); // Re-render to show edit buttons
@@ -304,6 +367,7 @@ async function loginDebug() {
             }
         }
     } catch (e) {
+        DevLog.error('API', 'Debug login failed', e);
         console.error(e);
     }
 }
@@ -317,6 +381,7 @@ function logoutDebug() {
     debugMode = false;
     debugPassword = "";
     localStorage.removeItem(DEBUG_PASSWORD_KEY);
+    DevLog.state('Debug mode disabled via logout');
 
     // Track debug mode logout
     if (typeof umami !== 'undefined') {
@@ -361,6 +426,7 @@ async function clearDebugOverrides() {
     }
     if (!confirm("Clear all debug overrides?")) return;
     try {
+        DevLog.api('/debug/clear', 'POST');
         const res = await fetch("/debug/clear", {
             method: "POST",
             headers: {
@@ -368,6 +434,7 @@ async function clearDebugOverrides() {
             }
         });
         const data = await res.json();
+        DevLog.apiResponse('/debug/clear', res.status, data);
         if (!res.ok || !data.success) {
             showError(data.error || "Failed to clear overrides.");
             return;
@@ -377,6 +444,7 @@ async function clearDebugOverrides() {
             umami.track('debug-clear-overrides');
         }
     } catch (e) {
+        DevLog.error('API', 'Failed to clear debug overrides', e);
         console.error(e);
         showError("Failed to clear overrides.");
     }
@@ -385,6 +453,7 @@ async function clearDebugOverrides() {
 function resetAppData() {
     if (!debugMode) return;
     if (!confirm("Reset ALL saved app data? This cannot be undone.")) return;
+    DevLog.storage('Resetting all app data', { keys: APP_STORAGE_KEYS });
     APP_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
     debugPassword = "";
     debugMode = devModeEnabled;
@@ -532,21 +601,24 @@ async function saveDebugOverride() {
     const delay = document.getElementById("editDelay").value;
 
     try {
+        const payload = {
+            stop_id,
+            line,
+            direction,
+            stable_scheduled_time,
+            minutes_remaining: minutes,
+            delay: delay
+        };
+        DevLog.api('/debug/update', 'POST', payload);
         const res = await fetch("/debug/update", {
             method: "POST",
             headers: withDebugAuthHeaders({
                 "Content-Type": "application/json"
             }),
-            body: JSON.stringify({
-                stop_id,
-                line,
-                direction,
-                stable_scheduled_time,
-                minutes_remaining: minutes,
-                delay: delay
-            })
+            body: JSON.stringify(payload)
         });
         const result = await res.json();
+        DevLog.apiResponse('/debug/update', res.status, result);
         console.log("Debug update response:", result);
 
         // Track debug override save
@@ -557,6 +629,7 @@ async function saveDebugOverride() {
         closeDebugEdit();
         refreshDepartures(); // Refresh data to see changes
     } catch (e) {
+        DevLog.error('API', 'Failed to save debug override', e);
         console.error(e);
     }
 }
@@ -568,24 +641,28 @@ async function clearDebugOverride() {
     const stable_scheduled_time = document.getElementById("editStableScheduledTime").value;
 
     try {
+        const payload = {
+            stop_id,
+            line,
+            direction,
+            stable_scheduled_time
+            // No overrides provided means clear
+        };
+        DevLog.api('/debug/update (clear)', 'POST', payload);
         const res = await fetch("/debug/update", {
             method: "POST",
             headers: withDebugAuthHeaders({
                 "Content-Type": "application/json"
             }),
-            body: JSON.stringify({
-                stop_id,
-                line,
-                direction,
-                stable_scheduled_time
-                // No overrides provided means clear
-            })
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
+        DevLog.apiResponse('/debug/update (clear)', res.status, data);
         console.log("Debug clear response:", data);
         closeDebugEdit();
         refreshDepartures();
     } catch (e) {
+        DevLog.error('API', 'Failed to clear debug override', e);
         console.error(e);
     }
 }
@@ -763,8 +840,10 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
             lookupName = lookupName.split('/')[0].trim();
         }
 
+        DevLog.api('/search', 'GET', { stop: lookupName });
         const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`);
         const result = await res.json();
+        DevLog.apiResponse('/search', res.status, { departures: result.departures?.length || 0, station: result.station_name });
 
         if (res.status === 404) {
             if (searchTimeout) {
@@ -860,8 +939,10 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     }
 
     try {
+        DevLog.api('/search_by_id', 'GET', { stop_id: stopId, station_name: stopName });
         const res = await fetch(`/search_by_id?stop_id=${stopId}&station_name=${encodeURIComponent(stopName)}`);
         const result = await res.json();
+        DevLog.apiResponse('/search_by_id', res.status, { departures: result.departures?.length || 0, station: result.station_name });
 
         if (result.error) {
             console.error(result.error);
@@ -902,18 +983,24 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
 
 async function fetchNotifications(stopIdParam) {
     if (!stopIdParam) {
+        DevLog.notification('Skipped fetch - no stopId provided');
         hideNotificationBar();
         return;
     }
     
     try {
-        const response = await fetch(`https://transitapi-dev.fuadserver.uk/api/current_notifs?stopID=${encodeURIComponent(stopIdParam)}`);
+        const apiUrl = `https://transitapi-dev.fuadserver.uk/api/current_notifs?stopID=${encodeURIComponent(stopIdParam)}`;
+        DevLog.api(apiUrl, 'GET', { stopID: stopIdParam });
+        const response = await fetch(apiUrl);
+        DevLog.apiResponse('current_notifs', response.status);
         if (!response.ok) {
+            DevLog.notification('Fetch failed - response not ok', { status: response.status });
             hideNotificationBar();
             return;
         }
         
         const notifications = await response.json();
+        DevLog.notification('Fetched notifications', { count: notifications?.length || 0, notifications });
         
         if (Array.isArray(notifications) && notifications.length > 0) {
             displayNotifications(notifications);
@@ -921,6 +1008,7 @@ async function fetchNotifications(stopIdParam) {
             hideNotificationBar();
         }
     } catch (e) {
+        DevLog.error('NOTIFICATION', 'Error fetching notifications', e);
         console.error("Error fetching notifications:", e);
         hideNotificationBar();
     }
@@ -944,12 +1032,14 @@ function displayNotifications(notifications) {
     const textLength = text.length;
     const duration = Math.max(15, textLength * 0.3);
     notificationText.style.animationDuration = `${duration}s`;
+    DevLog.notification('Displayed notifications', { count: notifications.length, textLength, animationDuration: `${duration}s` });
 }
 
 function hideNotificationBar() {
     const notificationBar = document.getElementById("notificationBar");
     if (notificationBar) {
         notificationBar.style.display = "none";
+        DevLog.notification('Hidden notification bar');
     }
 }
 
@@ -998,6 +1088,8 @@ function applyFilter() {
     const lineFilter = document.getElementById("lineFilter").value.trim();
     const typeFilter = document.getElementById("typeFilter").value;
     const wheelchairFilter = document.getElementById("wheelchairFilter").checked;
+
+    DevLog.filter('Applying filters', { line: lineFilter || '(none)', type: typeFilter || '(all)', wheelchair: wheelchairFilter });
 
     // Track filter usage
     if (typeof umami !== 'undefined') {
@@ -1397,6 +1489,7 @@ function toggleFavorite() {
     if (index > -1) {
         // Remove from favorites
         favorites.splice(index, 1);
+        DevLog.storage('Removed from favorites', { id: stopId, name: cleanedName });
         // Track favorite removal
         if (typeof umami !== 'undefined') {
             umami.track('favorite-remove', { station: cleanedName });
@@ -1407,6 +1500,7 @@ function toggleFavorite() {
             id: stopId,
             name: cleanedName
         });
+        DevLog.storage('Added to favorites', { id: stopId, name: cleanedName });
         // Track favorite addition
         if (typeof umami !== 'undefined') {
             umami.track('favorite-add', { station: cleanedName });
@@ -1512,6 +1606,7 @@ function setHomeStation() {
         // Already home, maybe toggle off? The description says "this will then set that station as their home"
         // Let's allow unsetting if they click it again.
         localStorage.removeItem(HOME_STATION_KEY);
+        DevLog.storage('Unset home station', { id: stopId, name: cleanedName });
         // Track home station unset
         if (typeof umami !== 'undefined') {
             umami.track('home-station-unset', { station: cleanedName });
@@ -1521,6 +1616,7 @@ function setHomeStation() {
             id: stopId,
             name: cleanedName
         }));
+        DevLog.storage('Set home station', { id: stopId, name: cleanedName });
         // Track home station set
         if (typeof umami !== 'undefined') {
             umami.track('home-station-set', { station: cleanedName });
@@ -1548,6 +1644,7 @@ function updateHomeButton() {
 // ------------------ INITIALIZATION ------------------
 
 function switchTab(tabId) {
+    DevLog.ui('Tab switch', { to: tabId });
     // Update tab buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.toggle('active', btn.innerText.toLowerCase() === tabId);
@@ -1571,10 +1668,12 @@ function switchTab(tabId) {
 
 function initMap() {
     if (map) {
+        DevLog.map('Map already initialized, invalidating size');
         setTimeout(() => map.invalidateSize(), 100);
         return;
     }
 
+    DevLog.map('Initializing map', { center: [49.0069, 8.4037], zoom: 13 });
     // Centered on Karlsruhe: 49.0069, 8.4037
     map = L.map('map').setView([49.0069, 8.4037], 13);
 
@@ -1711,24 +1810,28 @@ async function resolveMapCityName(lat, lon) {
                 zoom: "10",
                 addressdetails: "1"
             });
+            DevLog.map('Nominatim reverse geocode', { lat, lon, cacheKey });
             const response = await fetch(`${MAP_CITY_NOMINATIM_URL}?${params.toString()}`, {
                 headers: {
                     "Accept": "application/json",
                     "User-Agent": getMapCityUserAgent()
                 }
             });
+            DevLog.apiResponse('Nominatim', response.status);
             if (!response.ok) {
                 const statusText = response.statusText ? ` ${response.statusText}` : "";
                 throw new Error(`Reverse geocode failed: ${response.status}${statusText}`);
             }
             const data = await response.json();
             const city = getCityFromAddress(data.address);
+            DevLog.map('Nominatim resolved city', { city, address: data.address });
             if (city) {
                 MAP_CITY_CACHE.set(cacheKey, { city, timestamp: Date.now() });
             }
             mapCityFailureCount = 0;
             return city;
         } catch (error) {
+            DevLog.error('MAP', 'Error resolving map city name', error);
             console.error("Error resolving map city name:", error);
             mapCityFailureCount += 1;
             if (mapCityFailureCount >= MAP_CITY_FAILURE_WARN_THRESHOLD) {
@@ -1783,19 +1886,23 @@ async function lookupStopByCoords(lat, lon) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
+        DevLog.api('/lookup_stop_by_coords', 'GET', { lat, lon });
         const res = await fetch(`/lookup_stop_by_coords?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`, {
             signal: controller.signal
         });
         const result = await res.json();
+        DevLog.apiResponse('/lookup_stop_by_coords', res.status, result);
         if (!res.ok || result.error) {
             throw new Error(result.error || "Failed to find nearby stop.");
         }
         return result;
     } catch (error) {
         if (error.name === "AbortError") {
+            DevLog.error('API', 'Stop lookup timed out', { lat, lon });
             throw new Error("Stop lookup timed out.");
         }
         if (error instanceof TypeError) {
+            DevLog.error('API', 'Network error in stop lookup', error);
             throw new Error(`Network error while contacting the server: ${error.message}`);
         }
         throw error;
@@ -2036,11 +2143,13 @@ async function updateOverpassMarkers() {
     `;
 
     try {
+        DevLog.map('Overpass API request', { requestId, bounds: { sw: { lat: sw.lat, lng: sw.lng }, ne: { lat: ne.lat, lng: ne.lng } } });
         const response = await fetch('https://overpass-api.de/api/interpreter', {
             method: 'POST',
             body: query
         });
         const data = await response.json();
+        DevLog.apiResponse('Overpass', response.status, { elements: data.elements?.length || 0, requestId });
 
         if (isStaleMapOverpassRequest(requestId)) {
             logStaleMapOverpassRequest(requestId);
@@ -2242,9 +2351,11 @@ async function locateNearestStation() {
 
     const btn = document.getElementById("locateMeBtn");
     btn.classList.add("active");
+    DevLog.location('Locate nearest station initiated');
 
     const findNearestStation = async (latitude, longitude) => {
         try {
+            DevLog.location('Finding nearest station', { latitude, longitude });
             // We use Overpass to find nearby public transport stops
             const query = `
                 [out:json][timeout:10];
@@ -2257,8 +2368,10 @@ async function locateNearestStation() {
                 out body;
             `;
             const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+            DevLog.api('Overpass (locate)', 'GET', { latitude, longitude, radius: 1000 });
             const res = await fetch(url);
             const data = await res.json();
+            DevLog.apiResponse('Overpass (locate)', res.status, { elements: data.elements?.length || 0 });
 
             if (!data.elements || data.elements.length === 0) {
                 showError("No stations found nearby.");
@@ -2304,24 +2417,29 @@ async function locateNearestStation() {
         if (typeof umami !== 'undefined') {
             umami.track('locate-me-dev-override');
         }
+        DevLog.location('Using dev location override', override);
         await findNearestStation(override.latitude, override.longitude);
         btn.classList.remove("active");
         return;
     }
 
     if (!navigator.geolocation) {
+        DevLog.location('Geolocation not supported');
         showError("Geolocation is not supported by your browser.");
         btn.classList.remove("active");
         return;
     }
 
+    DevLog.location('Requesting browser geolocation');
     navigator.geolocation.getCurrentPosition(
         async (position) => {
             const { latitude, longitude } = position.coords;
+            DevLog.location('Geolocation success', { latitude, longitude, accuracy: position.coords.accuracy });
             await findNearestStation(latitude, longitude);
             btn.classList.remove("active");
         },
         (error) => {
+            DevLog.error('LOCATION', 'Geolocation error', { code: error.code, message: error.message });
             console.error("Geolocation error:", error);
             showError("Could not get your location.");
             btn.classList.remove("active");
@@ -2331,6 +2449,8 @@ async function locateNearestStation() {
 }
 
 window.addEventListener("DOMContentLoaded", function() {
+    DevLog.state('Application initialized', { devMode: devModeEnabled, debugMode, hasSavedPassword: !!storedDebugPassword });
+    
     // Trigger search when user presses Enter in stop input
     document.getElementById("stopInput").addEventListener("keypress", function(event) {
         if (event.key === "Enter") {
@@ -2347,6 +2467,7 @@ window.addEventListener("DOMContentLoaded", function() {
     }
 
     const urlState = getUrlStateFromPath();
+    DevLog.state('Initial URL state', urlState);
     if (urlState.mode === "map") {
         switchTab("map");
     } else if (urlState.mode === "station" && urlState.stopId) {
@@ -2355,12 +2476,14 @@ window.addEventListener("DOMContentLoaded", function() {
     } else {
         const home = getHomeStation();
         if (home) {
+            DevLog.state('Loading home station', home);
             if (home.id) {
                 quickSearchById(home.id, home.name);
             } else {
                 quickSearch(home.name);
             }
         } else {
+            DevLog.state('No home station, loading default');
             quickSearch("Hauptbahnhof Vorplatz");
         }
     }
