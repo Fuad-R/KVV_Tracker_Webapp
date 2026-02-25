@@ -57,10 +57,13 @@
     </header>
 
     <!-- Notification Bar -->
-    <div id="notificationBar" class="notification-bar" style="display: none;">
+    <div id="notificationBar" class="notification-bar{% if dev_mode %} notification-bar-editable{% endif %}" style="display: none;">
         <div class="notification-bar-content">
             <span id="notificationText" class="notification-text"></span>
         </div>
+        {% if dev_mode %}
+        <button class="notification-edit-btn debug-edit-btn" onclick="openNotificationEdit()" title="Edit notification bar">✎</button>
+        {% endif %}
     </div>
 
     <main class="main-content">
@@ -262,6 +265,31 @@
         </div>
     </div>
 </div>
+
+{% if dev_mode %}
+<!-- Notification Bar Edit Popup -->
+<div id="notificationEditPopup" class="modal">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeNotificationEdit()">×</button>
+        <h2 class="modal-title">Notification Bar</h2>
+        <div class="debug-form">
+            <label for="notificationWidth">Bar Width (%)</label>
+            <input type="number" id="notificationWidth" class="search-input" min="10" max="100" step="1" style="margin-bottom: 15px;">
+
+            <label for="notificationTextSize">Text Size (px)</label>
+            <input type="number" id="notificationTextSize" class="search-input" min="10" max="30" step="1" style="margin-bottom: 15px;">
+
+            <label for="notificationScrollDuration">Scroll Speed (seconds)</label>
+            <input type="number" id="notificationScrollDuration" class="search-input" min="5" step="1" style="margin-bottom: 15px;">
+
+            <div style="display: flex; gap: 10px;">
+                <button class="search-btn" onclick="saveNotificationEdit()" style="flex: 1;">Save</button>
+                <button class="search-btn" onclick="resetNotificationEdit()" style="flex: 1; background: #666;">Reset</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Dev Location Popup -->
 <div id="devLocationPopup" class="modal">

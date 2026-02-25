@@ -81,6 +81,12 @@ const FAVORITES_KEY = 'transit_favorites';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
+const NOTIFICATION_SETTINGS_DEFAULTS = {
+    widthPercent: 100,
+    textSizePx: 14,
+    scrollDuration: null
+};
+let notificationSettings = { ...NOTIFICATION_SETTINGS_DEFAULTS };
 const APP_STORAGE_KEYS = [
     FAVORITES_KEY,
     HOME_STATION_KEY,
@@ -520,6 +526,87 @@ function openDebugEdit(stop_id, line, direction, stable_scheduled_time, minutes,
 
 function closeDebugEdit() {
     document.getElementById("debugEditPopup").style.display = "none";
+}
+
+function getCurrentNotificationScrollDuration() {
+    const notificationContent = document.querySelector(".notification-bar-content");
+    if (!notificationContent) return null;
+    const duration = parseFloat(getComputedStyle(notificationContent).animationDuration);
+    return Number.isFinite(duration) ? duration : null;
+}
+
+function openNotificationEdit() {
+    const popup = document.getElementById("notificationEditPopup");
+    if (!popup) return;
+    const widthInput = document.getElementById("notificationWidth");
+    const textSizeInput = document.getElementById("notificationTextSize");
+    const scrollInput = document.getElementById("notificationScrollDuration");
+    const currentDuration = notificationSettings.scrollDuration ?? getCurrentNotificationScrollDuration();
+    if (widthInput) widthInput.value = notificationSettings.widthPercent;
+    if (textSizeInput) textSizeInput.value = notificationSettings.textSizePx;
+    if (scrollInput) scrollInput.value = currentDuration ?? "";
+    popup.style.display = "block";
+}
+
+function closeNotificationEdit() {
+    const popup = document.getElementById("notificationEditPopup");
+    if (popup) popup.style.display = "none";
+}
+
+function saveNotificationEdit() {
+    const widthValue = Number(document.getElementById("notificationWidth").value);
+    const textSizeValue = Number(document.getElementById("notificationTextSize").value);
+    const scrollValue = Number(document.getElementById("notificationScrollDuration").value);
+    notificationSettings.widthPercent = Number.isFinite(widthValue) && widthValue > 0
+        ? widthValue
+        : NOTIFICATION_SETTINGS_DEFAULTS.widthPercent;
+    notificationSettings.textSizePx = Number.isFinite(textSizeValue) && textSizeValue > 0
+        ? textSizeValue
+        : NOTIFICATION_SETTINGS_DEFAULTS.textSizePx;
+    notificationSettings.scrollDuration = Number.isFinite(scrollValue) && scrollValue > 0
+        ? scrollValue
+        : null;
+    applyNotificationSizing();
+    updateNotificationScrollDuration();
+    closeNotificationEdit();
+}
+
+function resetNotificationEdit() {
+    notificationSettings = { ...NOTIFICATION_SETTINGS_DEFAULTS };
+    applyNotificationSizing();
+    updateNotificationScrollDuration();
+    closeNotificationEdit();
+}
+
+function applyNotificationSizing() {
+    const notificationBar = document.getElementById("notificationBar");
+    const notificationText = document.getElementById("notificationText");
+    if (!notificationBar || !notificationText) return;
+    if (notificationSettings.widthPercent !== NOTIFICATION_SETTINGS_DEFAULTS.widthPercent) {
+        notificationBar.style.width = `${notificationSettings.widthPercent}%`;
+        notificationBar.style.margin = "0 auto";
+    } else {
+        notificationBar.style.width = "";
+        notificationBar.style.margin = "";
+    }
+    if (notificationSettings.textSizePx !== NOTIFICATION_SETTINGS_DEFAULTS.textSizePx) {
+        notificationText.style.fontSize = `${notificationSettings.textSizePx}px`;
+    } else {
+        notificationText.style.fontSize = "";
+    }
+}
+
+function updateNotificationScrollDuration(textLength = null) {
+    const notificationContent = document.querySelector(".notification-bar-content");
+    if (!notificationContent) return null;
+    const notificationText = document.getElementById("notificationText");
+    const resolvedLength = Number.isFinite(textLength)
+        ? textLength
+        : (notificationText?.textContent?.length || 0);
+    const baseDuration = Math.max(15, resolvedLength * 0.3);
+    const duration = notificationSettings.scrollDuration ?? baseDuration;
+    notificationContent.style.animationDuration = `${duration}s`;
+    return duration;
 }
 
 function openDevLocation() {
@@ -1031,22 +1118,21 @@ async function fetchNotifications(stopIdParam) {
 function displayNotifications(notifications) {
     const notificationBar = document.getElementById("notificationBar");
     const notificationText = document.getElementById("notificationText");
+    const notificationContent = notificationBar?.querySelector(".notification-bar-content");
     
-    if (!notificationBar || !notificationText) return;
+    if (!notificationBar || !notificationText || !notificationContent) return;
     
     // Join all notifications with a separator
     const text = notifications.join("  •  ");
-    
-    // Duplicate the text to create seamless scrolling effect
-    notificationText.innerHTML = text + "  •  " + text;
+    notificationText.textContent = text;
     
     notificationBar.style.display = "block";
     
     // Adjust animation duration based on text length
     const textLength = text.length;
-    const duration = Math.max(15, textLength * 0.3);
-    notificationText.style.animationDuration = `${duration}s`;
-    DevLog.notification('Displayed notifications', { count: notifications.length, textLength, animationDuration: `${duration}s` });
+    applyNotificationSizing();
+    const duration = updateNotificationScrollDuration(textLength);
+    DevLog.notification('Displayed notifications', { count: notifications.length, textLength, animationDuration: duration ? `${duration}s` : null });
 }
 
 function hideNotificationBar() {
@@ -1358,6 +1444,13 @@ window.addEventListener("click", function(event) {
     if (debugEditPopup.style.display === "block" &&
         !debugEditPopup.querySelector(".modal-content").contains(event.target)) {
         debugEditPopup.style.display = "none";
+    }
+
+    const notificationEditPopup = document.getElementById("notificationEditPopup");
+    if (notificationEditPopup &&
+        notificationEditPopup.style.display === "block" &&
+        !notificationEditPopup.querySelector(".modal-content").contains(event.target)) {
+        notificationEditPopup.style.display = "none";
     }
 
     if (stationPopup.style.display === "block" &&
