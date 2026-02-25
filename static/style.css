@@ -23,8 +23,6 @@
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
     --announcement-bg: #fff176;
     --announcement-text: #333333;
-    --announcement-edit-bg: rgba(0, 0, 0, 0.05);
-    --announcement-edit-hover: rgba(0, 0, 0, 0.1);
 }
 
 body.dark-mode {
@@ -46,8 +44,6 @@ body.dark-mode {
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
     --announcement-bg: #fdd835;
     --announcement-text: #212121;
-    --announcement-edit-bg: rgba(0, 0, 0, 0.1);
-    --announcement-edit-hover: rgba(0, 0, 0, 0.2);
 }
 
 .header-tabs {
@@ -125,38 +121,9 @@ body.dark-mode {
     font-size: var(--announcement-font-size, 14px);
 }
 
-.announcement-controls {
-    display: flex;
-    gap: 5px;
-    margin-left: 10px;
-}
-
 @keyframes marquee {
     0% { transform: translateX(0); }
     100% { transform: translateX(-100%); }
-}
-
-.edit-announcement-btn {
-    background: var(--announcement-edit-bg);
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 4px;
-    padding: 4px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-left: 10px;
-    transition: all 0.2s;
-}
-
-.edit-announcement-btn:hover {
-    background: var(--announcement-edit-hover);
-}
-
-.edit-announcement-btn svg {
-    width: 16px;
-    height: 16px;
-    color: var(--announcement-text);
 }
 
 #map {

@@ -23,8 +23,6 @@ const FAVORITES_KEY = 'transit_favorites';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
-const ANNOUNCEMENT_KEY = 'transit_announcement_text';
-const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
 const NOTIFICATIONS_API_URL = devModeEnabled
     ? 'https://transitapi-dev.fuadserver.uk/api/current_notifs'
     : 'https://transitapi.fuadserver.uk/api/current_notifs';
@@ -33,9 +31,7 @@ const APP_STORAGE_KEYS = [
     HOME_STATION_KEY,
     EXPERIMENTAL_KEY,
     DEV_LOCATION_KEY,
-    DEBUG_PASSWORD_KEY,
-    ANNOUNCEMENT_KEY,
-    ANNOUNCEMENT_SETTINGS_KEY
+    DEBUG_PASSWORD_KEY
 ];
 const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
@@ -278,14 +274,6 @@ function enableDebugUI() {
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "block";
 
-    // Show announcement bar in dev mode
-    const announcementBar = document.getElementById("announcementBar");
-    if (announcementBar) announcementBar.style.display = "flex";
-    const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-    if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
-    const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
-    if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
-
     updateExperimentalUI();
 }
 
@@ -351,14 +339,6 @@ function logoutDebug() {
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "none";
 
-    // Hide announcement bar when leaving dev mode (unless there are API notifications)
-    const announcementBar = document.getElementById("announcementBar");
-    if (announcementBar) announcementBar.style.display = "none";
-    const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-    if (editAnnouncementBtn) editAnnouncementBtn.style.display = "none";
-    const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
-    if (announcementSettingsBtn) announcementSettingsBtn.style.display = "none";
-
     // Re-fetch notifications to update announcement bar visibility
     if (stopId) {
         displayNotificationsForStop(stopId);
@@ -420,106 +400,6 @@ function resetAppData() {
         umami.track('debug-reset-app-data');
     }
     window.location.reload();
-}
-
-function editAnnouncement() {
-    if (!debugMode) return;
-    const currentText = document.getElementById("announcementText").textContent;
-    const newText = prompt("Enter new announcement text:", currentText);
-    if (newText !== null) {
-        document.getElementById("announcementText").textContent = newText;
-        localStorage.setItem(ANNOUNCEMENT_KEY, newText);
-    }
-}
-
-// ------------------ ANNOUNCEMENT SETTINGS ------------------
-
-function openAnnouncementSettings() {
-    const settings = getAnnouncementSettings();
-    document.getElementById("announcementHeight").value = settings.height || 40;
-    document.getElementById("announcementFontSize").value = settings.fontSize || 16;
-    document.getElementById("announcementSpeed").value = settings.speed || 15;
-    document.getElementById("announcementBgColor").value = settings.bgColor || "#fff176";
-    document.getElementById("announcementTextColor").value = settings.textColor || "#333333";
-    
-    document.getElementById("announcementSettingsPopup").style.display = "block";
-}
-
-function closeAnnouncementSettings() {
-    document.getElementById("announcementSettingsPopup").style.display = "none";
-    // Re-apply saved settings to revert any un-saved changes made during preview
-    applyAnnouncementSettings(getAnnouncementSettings());
-}
-
-function getAnnouncementSettings() {
-    const saved = localStorage.getItem(ANNOUNCEMENT_SETTINGS_KEY);
-    if (saved) {
-        try {
-            return JSON.parse(saved);
-        } catch (e) {
-            console.error("Error parsing announcement settings:", e);
-        }
-    }
-    return {
-        height: 40,
-        fontSize: 16,
-        speed: 15,
-        bgColor: "#fff176",
-        textColor: "#333333"
-    };
-}
-
-function applyAnnouncementSettings(settings) {
-    const bar = document.getElementById("announcementBar");
-    if (!bar) return;
-
-    if (settings.height) bar.style.setProperty('--announcement-height', `${settings.height}px`);
-    if (settings.fontSize) bar.style.setProperty('--announcement-font-size', `${settings.fontSize}px`);
-    if (settings.speed) bar.style.setProperty('--announcement-speed', `${settings.speed}s`);
-    if (settings.bgColor) bar.style.setProperty('--announcement-bg', settings.bgColor);
-    if (settings.textColor) bar.style.setProperty('--announcement-text', settings.textColor);
-}
-
-function updateAnnouncementPreview() {
-    const settings = {
-        height: document.getElementById("announcementHeight").value,
-        fontSize: document.getElementById("announcementFontSize").value,
-        speed: document.getElementById("announcementSpeed").value,
-        bgColor: document.getElementById("announcementBgColor").value,
-        textColor: document.getElementById("announcementTextColor").value
-    };
-    applyAnnouncementSettings(settings);
-}
-
-function saveAnnouncementSettings() {
-    const settings = {
-        height: document.getElementById("announcementHeight").value,
-        fontSize: document.getElementById("announcementFontSize").value,
-        speed: document.getElementById("announcementSpeed").value,
-        bgColor: document.getElementById("announcementBgColor").value,
-        textColor: document.getElementById("announcementTextColor").value
-    };
-    localStorage.setItem(ANNOUNCEMENT_SETTINGS_KEY, JSON.stringify(settings));
-    applyAnnouncementSettings(settings);
-    closeAnnouncementSettings();
-}
-
-function resetAnnouncementSettings() {
-    const defaults = {
-        height: 40,
-        fontSize: 16,
-        speed: 15,
-        bgColor: "#fff176",
-        textColor: "#333333"
-    };
-    
-    document.getElementById("announcementHeight").value = defaults.height;
-    document.getElementById("announcementFontSize").value = defaults.fontSize;
-    document.getElementById("announcementSpeed").value = defaults.speed;
-    document.getElementById("announcementBgColor").value = defaults.bgColor;
-    document.getElementById("announcementTextColor").value = defaults.textColor;
-    
-    applyAnnouncementSettings(defaults);
 }
 
 // ------------------ EXPERIMENTAL FEATURES ------------------
@@ -605,13 +485,11 @@ async function fetchStopNotifications(stopIdForNotifs) {
 /**
  * Updates the yellow announcement banner at the top of the page.
  * Shows the banner with notification text if notifications are provided (not null).
- * Hides the banner when no notifications are available (unless in debug mode).
+ * Hides the banner when no notifications are available.
  */
 function updateAnnouncementBar(notifications) {
     const announcementBar = document.getElementById("announcementBar");
     const announcementText = document.getElementById("announcementText");
-    const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-    const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
     
     // If notifications are returned (not null), display them in the yellow banner
     if (notifications !== null && notifications.length > 0) {
@@ -619,20 +497,8 @@ function updateAnnouncementBar(notifications) {
         const notificationText = notifications.join(" • ");
         announcementText.textContent = notificationText;
         announcementBar.style.display = "flex";
-        // Hide edit/settings buttons when showing API notifications (not user-editable)
-        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "none";
-        if (announcementSettingsBtn) announcementSettingsBtn.style.display = debugMode ? "flex" : "none";
-    } else if (debugMode) {
-        // In dev mode, show the bar with saved announcement text if no notifications
-        const savedAnnouncement = localStorage.getItem(ANNOUNCEMENT_KEY);
-        if (savedAnnouncement) {
-            announcementText.textContent = savedAnnouncement;
-        }
-        announcementBar.style.display = "flex";
-        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
-        if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
     } else {
-        // Hide bar when no notifications and not in dev mode
+        // Hide bar when no notifications
         announcementBar.style.display = "none";
     }
 }
@@ -2500,12 +2366,6 @@ window.addEventListener("DOMContentLoaded", function() {
 
     updateFavoritesDisplay();
     updateExperimentalUI();
-    
-    // Load saved announcement
-    const savedAnnouncement = localStorage.getItem(ANNOUNCEMENT_KEY);
-    if (savedAnnouncement) {
-        document.getElementById("announcementText").textContent = savedAnnouncement;
-    }
 
     // Auto-enable debug UI if dev mode is enabled or a password is saved
     if (debugMode) {
