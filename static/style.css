@@ -250,6 +250,44 @@ body.dark-mode .moon-icon {
     display: block;
 }
 
+/* ==================== NOTIFICATION BAR ==================== */
+
+.notification-bar {
+    background: #f9c846;
+    color: #1a1a1a;
+    overflow: hidden;
+    position: relative;
+    z-index: 99;
+}
+
+.notification-bar-content {
+    display: flex;
+    white-space: nowrap;
+    animation: scroll-left 20s linear infinite;
+    padding: 10px 0;
+}
+
+.notification-text {
+    display: inline-block;
+    padding-left: 100%;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+@keyframes scroll-left {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-100%);
+    }
+}
+
+body.dark-mode .notification-bar {
+    background: #d4a939;
+    color: #1a1a1a;
+}
+
 /* ==================== MAIN CONTENT ==================== */
 
 .app-container {

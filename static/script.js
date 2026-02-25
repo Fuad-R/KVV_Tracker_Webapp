@@ -816,6 +816,9 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
             stopId = result.departures[0].stop_id;
         }
 
+        // Fetch notifications for this stop
+        fetchNotifications(stopId);
+
         // Handle multiple stations
         if (result.all_stations) {
             populateStationDropdown(result.all_stations);
@@ -877,6 +880,11 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
         document.title = `${result.station_name} - Transit Live Departures`;
         stopName = result.station_name;
 
+        // Fetch notifications when user initiates a search
+        if (isUserSearch) {
+            fetchNotifications(stopId);
+        }
+
         lastDepartures = result.departures;
         applyFilter();
         countdown = 30;
@@ -887,6 +895,61 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
         console.error(e);
     } finally {
         document.getElementById("loading").style.display = "none";
+    }
+}
+
+// ------------------ NOTIFICATION BAR ------------------
+
+async function fetchNotifications(stopIdParam) {
+    if (!stopIdParam) {
+        hideNotificationBar();
+        return;
+    }
+    
+    try {
+        const response = await fetch(`https://transitapi-dev.fuadserver.uk/api/current_notifs?stopID=${encodeURIComponent(stopIdParam)}`);
+        if (!response.ok) {
+            hideNotificationBar();
+            return;
+        }
+        
+        const notifications = await response.json();
+        
+        if (Array.isArray(notifications) && notifications.length > 0) {
+            displayNotifications(notifications);
+        } else {
+            hideNotificationBar();
+        }
+    } catch (e) {
+        console.error("Error fetching notifications:", e);
+        hideNotificationBar();
+    }
+}
+
+function displayNotifications(notifications) {
+    const notificationBar = document.getElementById("notificationBar");
+    const notificationText = document.getElementById("notificationText");
+    
+    if (!notificationBar || !notificationText) return;
+    
+    // Join all notifications with a separator
+    const text = notifications.join("  •  ");
+    
+    // Duplicate the text to create seamless scrolling effect
+    notificationText.innerHTML = text + "  •  " + text;
+    
+    notificationBar.style.display = "block";
+    
+    // Adjust animation duration based on text length
+    const textLength = text.length;
+    const duration = Math.max(15, textLength * 0.3);
+    notificationText.style.animationDuration = `${duration}s`;
+}
+
+function hideNotificationBar() {
+    const notificationBar = document.getElementById("notificationBar");
+    if (notificationBar) {
+        notificationBar.style.display = "none";
     }
 }
 
