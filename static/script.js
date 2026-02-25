@@ -3,6 +3,9 @@ let stopId = null;
 const DEBUG_PASSWORD_KEY = "debugPassword";
 const appConfig = window.APP_CONFIG || {};
 const devModeEnabled = appConfig.devMode === true;
+const notificationApiBaseUrl = devModeEnabled
+    ? "https://transitapi-dev.fuadserver.uk/api"
+    : "https://transitapi.fuadserver.uk/api";
 const storedDebugPassword = localStorage.getItem(DEBUG_PASSWORD_KEY) || "";
 let debugPassword = storedDebugPassword;
 let debugMode = devModeEnabled || !!debugPassword;
@@ -1089,7 +1092,7 @@ async function fetchNotifications(stopIdParam) {
     }
     
     try {
-        const apiUrl = `https://transitapi-dev.fuadserver.uk/api/current_notifs?stopID=${encodeURIComponent(stopIdParam)}`;
+        const apiUrl = `${notificationApiBaseUrl}/current_notifs?stopID=${encodeURIComponent(stopIdParam)}`;
         DevLog.api(apiUrl, 'GET', { stopID: stopIdParam });
         const response = await fetch(apiUrl);
         DevLog.apiResponse('current_notifs', response.status);
