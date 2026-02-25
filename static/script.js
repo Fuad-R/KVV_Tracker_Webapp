@@ -3,9 +3,70 @@ let stopId = null;
 const DEBUG_PASSWORD_KEY = "debugPassword";
 const appConfig = window.APP_CONFIG || {};
 const devModeEnabled = appConfig.devMode === true;
+const notificationApiBaseUrl = devModeEnabled
+    ? "https://transitapi-dev.fuadserver.uk/api"
+    : "https://transitapi.fuadserver.uk/api";
 const storedDebugPassword = localStorage.getItem(DEBUG_PASSWORD_KEY) || "";
 let debugPassword = storedDebugPassword;
 let debugMode = devModeEnabled || !!debugPassword;
+
+// ================== DEBUG LOGGING ==================
+// Debug logging utility - only active in dev mode
+const DevLog = {
+    _enabled: devModeEnabled,
+    _formatTimestamp: () => new Date().toISOString().slice(11, 23),
+    _log: (category, message, data = null) => {
+        if (!DevLog._enabled) return;
+        const timestamp = DevLog._formatTimestamp();
+        const prefix = `[${timestamp}] [${category}]`;
+        if (data !== null) {
+            console.log(`%c${prefix}%c ${message}`, 'color: #0088cc; font-weight: bold', 'color: inherit', data);
+        } else {
+            console.log(`%c${prefix}%c ${message}`, 'color: #0088cc; font-weight: bold', 'color: inherit');
+        }
+    },
+    api: (endpoint, method = 'GET', params = null) => {
+        DevLog._log('API', `${method} ${endpoint}`, params);
+    },
+    apiResponse: (endpoint, status, data = null) => {
+        const statusColor = status >= 200 && status < 300 ? '#2e7d32' : '#c62828';
+        if (!DevLog._enabled) return;
+        const timestamp = DevLog._formatTimestamp();
+        console.log(
+            `%c[${timestamp}] [API-RESPONSE]%c ${endpoint} %c[${status}]`,
+            'color: #0088cc; font-weight: bold',
+            'color: inherit',
+            `color: ${statusColor}; font-weight: bold`,
+            data
+        );
+    },
+    notification: (action, data = null) => {
+        DevLog._log('NOTIFICATION', action, data);
+    },
+    state: (action, data = null) => {
+        DevLog._log('STATE', action, data);
+    },
+    filter: (action, data = null) => {
+        DevLog._log('FILTER', action, data);
+    },
+    ui: (action, data = null) => {
+        DevLog._log('UI', action, data);
+    },
+    map: (action, data = null) => {
+        DevLog._log('MAP', action, data);
+    },
+    storage: (action, data = null) => {
+        DevLog._log('STORAGE', action, data);
+    },
+    location: (action, data = null) => {
+        DevLog._log('LOCATION', action, data);
+    },
+    error: (category, message, error = null) => {
+        if (!DevLog._enabled) return;
+        const timestamp = DevLog._formatTimestamp();
+        console.error(`%c[${timestamp}] [${category}-ERROR]%c ${message}`, 'color: #c62828; font-weight: bold', 'color: inherit', error);
+    }
+};
 let countdown = 30;
 let countdownInterval;
 let refreshInterval;
@@ -23,19 +84,18 @@ const FAVORITES_KEY = 'transit_favorites';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
-const ANNOUNCEMENT_KEY = 'transit_announcement_text';
-const ANNOUNCEMENT_SETTINGS_KEY = 'transit_announcement_settings';
-const NOTIFICATIONS_API_URL = devModeEnabled
-    ? 'https://transitapi-dev.fuadserver.uk/api/current_notifs'
-    : 'https://transitapi.fuadserver.uk/api/current_notifs';
+const NOTIFICATION_SETTINGS_DEFAULTS = {
+    heightPercent: 100,
+    textSizePx: 14,
+    scrollDuration: null
+};
+let notificationSettings = { ...NOTIFICATION_SETTINGS_DEFAULTS };
 const APP_STORAGE_KEYS = [
     FAVORITES_KEY,
     HOME_STATION_KEY,
     EXPERIMENTAL_KEY,
     DEV_LOCATION_KEY,
-    DEBUG_PASSWORD_KEY,
-    ANNOUNCEMENT_KEY,
-    ANNOUNCEMENT_SETTINGS_KEY
+    DEBUG_PASSWORD_KEY
 ];
 const MAP_POPUP_CACHE = new Map();
 const MAP_POPUP_CACHE_TTL_MS = 60 * 1000;
@@ -151,11 +211,13 @@ function syncUrlFromState(replace = false) {
 
     if (window.location.pathname === targetPath && !replace) return;
     const stateMethod = replace ? "replaceState" : "pushState";
+    DevLog.state(`URL sync: ${stateMethod}`, { from: window.location.pathname, to: targetPath });
     window.history[stateMethod]({}, "", targetPath);
 }
 
 function applyUrlState() {
     const state = getUrlStateFromPath();
+    DevLog.state('Applying URL state', state);
     isApplyingUrlState = true;
     try {
         if (state.mode === "map") {
@@ -278,30 +340,25 @@ function enableDebugUI() {
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "block";
 
-    // Show announcement bar in dev mode
-    const announcementBar = document.getElementById("announcementBar");
-    if (announcementBar) announcementBar.style.display = "flex";
-    const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-    if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
-    const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
-    if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
-
     updateExperimentalUI();
 }
 
 async function loginDebug() {
     const password = document.getElementById("debugPassword").value;
     try {
+        DevLog.api('/debug/login', 'POST');
         const res = await fetch("/debug/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ password })
         });
         const data = await res.json();
+        DevLog.apiResponse('/debug/login', res.status, { success: data.success });
     if (data.success) {
         debugMode = true;
         debugPassword = password;
         localStorage.setItem(DEBUG_PASSWORD_KEY, password);
+        DevLog.state('Debug mode enabled via login');
         closeDebugLogin();
         enableDebugUI();
         applyFilter(); // Re-render to show edit buttons
@@ -319,6 +376,7 @@ async function loginDebug() {
             }
         }
     } catch (e) {
+        DevLog.error('API', 'Debug login failed', e);
         console.error(e);
     }
 }
@@ -332,6 +390,7 @@ function logoutDebug() {
     debugMode = false;
     debugPassword = "";
     localStorage.removeItem(DEBUG_PASSWORD_KEY);
+    DevLog.state('Debug mode disabled via logout');
 
     // Track debug mode logout
     if (typeof umami !== 'undefined') {
@@ -350,19 +409,6 @@ function logoutDebug() {
     setLeaveDebugButtonVisible(false);
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "none";
-
-    // Hide announcement bar when leaving dev mode (unless there are API notifications)
-    const announcementBar = document.getElementById("announcementBar");
-    if (announcementBar) announcementBar.style.display = "none";
-    const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-    if (editAnnouncementBtn) editAnnouncementBtn.style.display = "none";
-    const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
-    if (announcementSettingsBtn) announcementSettingsBtn.style.display = "none";
-
-    // Re-fetch notifications to update announcement bar visibility
-    if (stopId) {
-        displayNotificationsForStop(stopId);
-    }
 
     updateExperimentalUI();
 
@@ -389,6 +435,7 @@ async function clearDebugOverrides() {
     }
     if (!confirm("Clear all debug overrides?")) return;
     try {
+        DevLog.api('/debug/clear', 'POST');
         const res = await fetch("/debug/clear", {
             method: "POST",
             headers: {
@@ -396,6 +443,7 @@ async function clearDebugOverrides() {
             }
         });
         const data = await res.json();
+        DevLog.apiResponse('/debug/clear', res.status, data);
         if (!res.ok || !data.success) {
             showError(data.error || "Failed to clear overrides.");
             return;
@@ -405,6 +453,7 @@ async function clearDebugOverrides() {
             umami.track('debug-clear-overrides');
         }
     } catch (e) {
+        DevLog.error('API', 'Failed to clear debug overrides', e);
         console.error(e);
         showError("Failed to clear overrides.");
     }
@@ -413,6 +462,7 @@ async function clearDebugOverrides() {
 function resetAppData() {
     if (!debugMode) return;
     if (!confirm("Reset ALL saved app data? This cannot be undone.")) return;
+    DevLog.storage('Resetting all app data', { keys: APP_STORAGE_KEYS });
     APP_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
     debugPassword = "";
     debugMode = devModeEnabled;
@@ -420,106 +470,6 @@ function resetAppData() {
         umami.track('debug-reset-app-data');
     }
     window.location.reload();
-}
-
-function editAnnouncement() {
-    if (!debugMode) return;
-    const currentText = document.getElementById("announcementText").textContent;
-    const newText = prompt("Enter new announcement text:", currentText);
-    if (newText !== null) {
-        document.getElementById("announcementText").textContent = newText;
-        localStorage.setItem(ANNOUNCEMENT_KEY, newText);
-    }
-}
-
-// ------------------ ANNOUNCEMENT SETTINGS ------------------
-
-function openAnnouncementSettings() {
-    const settings = getAnnouncementSettings();
-    document.getElementById("announcementHeight").value = settings.height || 40;
-    document.getElementById("announcementFontSize").value = settings.fontSize || 16;
-    document.getElementById("announcementSpeed").value = settings.speed || 15;
-    document.getElementById("announcementBgColor").value = settings.bgColor || "#fff176";
-    document.getElementById("announcementTextColor").value = settings.textColor || "#333333";
-    
-    document.getElementById("announcementSettingsPopup").style.display = "block";
-}
-
-function closeAnnouncementSettings() {
-    document.getElementById("announcementSettingsPopup").style.display = "none";
-    // Re-apply saved settings to revert any un-saved changes made during preview
-    applyAnnouncementSettings(getAnnouncementSettings());
-}
-
-function getAnnouncementSettings() {
-    const saved = localStorage.getItem(ANNOUNCEMENT_SETTINGS_KEY);
-    if (saved) {
-        try {
-            return JSON.parse(saved);
-        } catch (e) {
-            console.error("Error parsing announcement settings:", e);
-        }
-    }
-    return {
-        height: 40,
-        fontSize: 16,
-        speed: 15,
-        bgColor: "#fff176",
-        textColor: "#333333"
-    };
-}
-
-function applyAnnouncementSettings(settings) {
-    const bar = document.getElementById("announcementBar");
-    if (!bar) return;
-
-    if (settings.height) bar.style.setProperty('--announcement-height', `${settings.height}px`);
-    if (settings.fontSize) bar.style.setProperty('--announcement-font-size', `${settings.fontSize}px`);
-    if (settings.speed) bar.style.setProperty('--announcement-speed', `${settings.speed}s`);
-    if (settings.bgColor) bar.style.setProperty('--announcement-bg', settings.bgColor);
-    if (settings.textColor) bar.style.setProperty('--announcement-text', settings.textColor);
-}
-
-function updateAnnouncementPreview() {
-    const settings = {
-        height: document.getElementById("announcementHeight").value,
-        fontSize: document.getElementById("announcementFontSize").value,
-        speed: document.getElementById("announcementSpeed").value,
-        bgColor: document.getElementById("announcementBgColor").value,
-        textColor: document.getElementById("announcementTextColor").value
-    };
-    applyAnnouncementSettings(settings);
-}
-
-function saveAnnouncementSettings() {
-    const settings = {
-        height: document.getElementById("announcementHeight").value,
-        fontSize: document.getElementById("announcementFontSize").value,
-        speed: document.getElementById("announcementSpeed").value,
-        bgColor: document.getElementById("announcementBgColor").value,
-        textColor: document.getElementById("announcementTextColor").value
-    };
-    localStorage.setItem(ANNOUNCEMENT_SETTINGS_KEY, JSON.stringify(settings));
-    applyAnnouncementSettings(settings);
-    closeAnnouncementSettings();
-}
-
-function resetAnnouncementSettings() {
-    const defaults = {
-        height: 40,
-        fontSize: 16,
-        speed: 15,
-        bgColor: "#fff176",
-        textColor: "#333333"
-    };
-    
-    document.getElementById("announcementHeight").value = defaults.height;
-    document.getElementById("announcementFontSize").value = defaults.fontSize;
-    document.getElementById("announcementSpeed").value = defaults.speed;
-    document.getElementById("announcementBgColor").value = defaults.bgColor;
-    document.getElementById("announcementTextColor").value = defaults.textColor;
-    
-    applyAnnouncementSettings(defaults);
 }
 
 // ------------------ EXPERIMENTAL FEATURES ------------------
@@ -567,94 +517,6 @@ function updateExperimentalUI() {
     }
 }
 
-// ------------------ NOTIFICATION DISPLAY ------------------
-
-/**
- * Fetches notifications from the API for a given stop ID.
- * Returns an array of notification text strings, or an empty array if none found.
- */
-async function fetchStopNotifications(stopIdForNotifs) {
-    if (!stopIdForNotifs) return null;
-    try {
-        const res = await fetch(`${NOTIFICATIONS_API_URL}?stopID=${encodeURIComponent(stopIdForNotifs)}`);
-        if (!res.ok) return null;
-        const notifications = await res.json();
-        
-        // Return null if response is empty or not an array
-        if (!Array.isArray(notifications) || notifications.length === 0) {
-            return null;
-        }
-        
-        // Extract text from notification objects
-        const notificationTexts = notifications.map(n => {
-            if (typeof n === 'string') return n;
-            if (typeof n === 'object' && n !== null) {
-                return n.text || n.message || n.title || n.content || n.description || null;
-            }
-            return null;
-        }).filter(text => text != null);
-        
-        // Return null if no valid notification texts were found
-        return notificationTexts.length > 0 ? notificationTexts : null;
-    } catch (e) {
-        console.error("Error fetching notifications:", e);
-        return null;
-    }
-}
-
-/**
- * Updates the yellow announcement banner at the top of the page.
- * Shows the banner with notification text if notifications are provided (not null).
- * Hides the banner when no notifications are available (unless in debug mode).
- */
-function updateAnnouncementBar(notifications) {
-    const announcementBar = document.getElementById("announcementBar");
-    const announcementText = document.getElementById("announcementText");
-    const editAnnouncementBtn = document.getElementById("editAnnouncementBtn");
-    const announcementSettingsBtn = document.getElementById("announcementSettingsBtn");
-    
-    // If notifications are returned (not null), display them in the yellow banner
-    if (notifications !== null && notifications.length > 0) {
-        // Join multiple notifications with a separator
-        const notificationText = notifications.join(" • ");
-        announcementText.textContent = notificationText;
-        announcementBar.style.display = "flex";
-        // Hide edit/settings buttons when showing API notifications (not user-editable)
-        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "none";
-        if (announcementSettingsBtn) announcementSettingsBtn.style.display = debugMode ? "flex" : "none";
-    } else if (debugMode) {
-        // In dev mode, show the bar with saved announcement text if no notifications
-        const savedAnnouncement = localStorage.getItem(ANNOUNCEMENT_KEY);
-        if (savedAnnouncement) {
-            announcementText.textContent = savedAnnouncement;
-        }
-        announcementBar.style.display = "flex";
-        if (editAnnouncementBtn) editAnnouncementBtn.style.display = "flex";
-        if (announcementSettingsBtn) announcementSettingsBtn.style.display = "flex";
-    } else {
-        // Hide bar when no notifications and not in dev mode
-        announcementBar.style.display = "none";
-    }
-}
-
-/**
- * Main function to handle notification display after a stop search.
- * Call this after a stop name has been searched and the stop ID has been obtained.
- * Queries the notification API and displays results in the yellow banner if not null.
- */
-async function displayNotificationsForStop(stopIdForNotifs) {
-    if (!stopIdForNotifs) {
-        updateAnnouncementBar(null);
-        return;
-    }
-    
-    // Query the notification API with the stop ID
-    const notifications = await fetchStopNotifications(stopIdForNotifs);
-    
-    // Update the announcement bar - will show yellow banner if notifications are not null
-    updateAnnouncementBar(notifications);
-}
-
 function openDebugEdit(stop_id, line, direction, stable_scheduled_time, minutes, delay) {
     document.getElementById("editStopId").value = stop_id;
     document.getElementById("editLine").value = line;
@@ -667,6 +529,86 @@ function openDebugEdit(stop_id, line, direction, stable_scheduled_time, minutes,
 
 function closeDebugEdit() {
     document.getElementById("debugEditPopup").style.display = "none";
+}
+
+function getCurrentNotificationScrollDuration() {
+    const notificationContent = document.querySelector(".notification-bar-content");
+    if (!notificationContent) return null;
+    const duration = parseFloat(getComputedStyle(notificationContent).animationDuration);
+    return Number.isFinite(duration) ? duration : null;
+}
+
+function openNotificationEdit() {
+    const popup = document.getElementById("notificationEditPopup");
+    if (!popup) return;
+    const heightInput = document.getElementById("notificationHeight");
+    const textSizeInput = document.getElementById("notificationTextSize");
+    const scrollInput = document.getElementById("notificationScrollDuration");
+    const currentDuration = notificationSettings.scrollDuration ?? getCurrentNotificationScrollDuration();
+    if (heightInput) heightInput.value = notificationSettings.heightPercent;
+    if (textSizeInput) textSizeInput.value = notificationSettings.textSizePx;
+    if (scrollInput) scrollInput.value = currentDuration ?? "";
+    popup.style.display = "block";
+}
+
+function closeNotificationEdit() {
+    const popup = document.getElementById("notificationEditPopup");
+    if (popup) popup.style.display = "none";
+}
+
+function saveNotificationEdit() {
+    const heightValue = Number(document.getElementById("notificationHeight").value);
+    const textSizeValue = Number(document.getElementById("notificationTextSize").value);
+    const scrollValue = Number(document.getElementById("notificationScrollDuration").value);
+    notificationSettings.heightPercent = Number.isFinite(heightValue) && heightValue > 0
+        ? heightValue
+        : NOTIFICATION_SETTINGS_DEFAULTS.heightPercent;
+    notificationSettings.textSizePx = Number.isFinite(textSizeValue) && textSizeValue > 0
+        ? textSizeValue
+        : NOTIFICATION_SETTINGS_DEFAULTS.textSizePx;
+    notificationSettings.scrollDuration = Number.isFinite(scrollValue) && scrollValue > 0
+        ? scrollValue
+        : null;
+    applyNotificationSizing();
+    updateNotificationScrollDuration();
+    closeNotificationEdit();
+}
+
+function resetNotificationEdit() {
+    notificationSettings = { ...NOTIFICATION_SETTINGS_DEFAULTS };
+    applyNotificationSizing();
+    updateNotificationScrollDuration();
+    closeNotificationEdit();
+}
+
+function applyNotificationSizing() {
+    const notificationBar = document.getElementById("notificationBar");
+    const notificationText = document.getElementById("notificationText");
+    if (!notificationBar || !notificationText) return;
+    if (notificationSettings.heightPercent !== NOTIFICATION_SETTINGS_DEFAULTS.heightPercent) {
+        const scale = notificationSettings.heightPercent / 100;
+        notificationBar.style.setProperty("--notification-padding-scale", scale.toString());
+    } else {
+        notificationBar.style.removeProperty("--notification-padding-scale");
+    }
+    if (notificationSettings.textSizePx !== NOTIFICATION_SETTINGS_DEFAULTS.textSizePx) {
+        notificationText.style.fontSize = `${notificationSettings.textSizePx}px`;
+    } else {
+        notificationText.style.fontSize = "";
+    }
+}
+
+function updateNotificationScrollDuration(textLength = null) {
+    const notificationContent = document.querySelector(".notification-bar-content");
+    if (!notificationContent) return null;
+    const notificationText = document.getElementById("notificationText");
+    const resolvedLength = Number.isFinite(textLength)
+        ? textLength
+        : (notificationText?.textContent?.length || 0);
+    const baseDuration = Math.max(15, resolvedLength * 0.3);
+    const duration = notificationSettings.scrollDuration ?? baseDuration;
+    notificationContent.style.animationDuration = `${duration}s`;
+    return duration;
 }
 
 function openDevLocation() {
@@ -748,21 +690,24 @@ async function saveDebugOverride() {
     const delay = document.getElementById("editDelay").value;
 
     try {
+        const payload = {
+            stop_id,
+            line,
+            direction,
+            stable_scheduled_time,
+            minutes_remaining: minutes,
+            delay: delay
+        };
+        DevLog.api('/debug/update', 'POST', payload);
         const res = await fetch("/debug/update", {
             method: "POST",
             headers: withDebugAuthHeaders({
                 "Content-Type": "application/json"
             }),
-            body: JSON.stringify({
-                stop_id,
-                line,
-                direction,
-                stable_scheduled_time,
-                minutes_remaining: minutes,
-                delay: delay
-            })
+            body: JSON.stringify(payload)
         });
         const result = await res.json();
+        DevLog.apiResponse('/debug/update', res.status, result);
         console.log("Debug update response:", result);
 
         // Track debug override save
@@ -773,6 +718,7 @@ async function saveDebugOverride() {
         closeDebugEdit();
         refreshDepartures(); // Refresh data to see changes
     } catch (e) {
+        DevLog.error('API', 'Failed to save debug override', e);
         console.error(e);
     }
 }
@@ -784,24 +730,28 @@ async function clearDebugOverride() {
     const stable_scheduled_time = document.getElementById("editStableScheduledTime").value;
 
     try {
+        const payload = {
+            stop_id,
+            line,
+            direction,
+            stable_scheduled_time
+            // No overrides provided means clear
+        };
+        DevLog.api('/debug/update (clear)', 'POST', payload);
         const res = await fetch("/debug/update", {
             method: "POST",
             headers: withDebugAuthHeaders({
                 "Content-Type": "application/json"
             }),
-            body: JSON.stringify({
-                stop_id,
-                line,
-                direction,
-                stable_scheduled_time
-                // No overrides provided means clear
-            })
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
+        DevLog.apiResponse('/debug/update (clear)', res.status, data);
         console.log("Debug clear response:", data);
         closeDebugEdit();
         refreshDepartures();
     } catch (e) {
+        DevLog.error('API', 'Failed to clear debug override', e);
         console.error(e);
     }
 }
@@ -979,8 +929,10 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
             lookupName = lookupName.split('/')[0].trim();
         }
 
+        DevLog.api('/search', 'GET', { stop: lookupName });
         const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`);
         const result = await res.json();
+        DevLog.apiResponse('/search', res.status, { departures: result.departures?.length || 0, station: result.station_name });
 
         if (res.status === 404) {
             if (searchTimeout) {
@@ -1032,6 +984,17 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
             stopId = result.departures[0].stop_id;
         }
 
+        // Fetch notifications for this stop
+        if (Array.isArray(result.notifications)) {
+            if (result.notifications.length > 0) {
+                displayNotifications(result.notifications);
+            } else {
+                hideNotificationBar();
+            }
+        } else {
+            fetchNotifications(stopId);
+        }
+
         // Handle multiple stations
         if (result.all_stations) {
             populateStationDropdown(result.all_stations);
@@ -1045,10 +1008,6 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         updateFavoriteButton();
         updateHomeButton();
         syncUrlFromState(!isUserSearch);
-
-        // Fetch and display notifications for this stop (after stop ID is grabbed)
-        const currentStopId = stopId || (result.matched_stop && result.matched_stop.id);
-        await displayNotificationsForStop(currentStopId);
     } catch (e) {
         console.error(e);
     } finally {
@@ -1077,8 +1036,10 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     }
 
     try {
+        DevLog.api('/search_by_id', 'GET', { stop_id: stopId, station_name: stopName });
         const res = await fetch(`/search_by_id?stop_id=${stopId}&station_name=${encodeURIComponent(stopName)}`);
         const result = await res.json();
+        DevLog.apiResponse('/search_by_id', res.status, { departures: result.departures?.length || 0, station: result.station_name });
 
         if (result.error) {
             console.error(result.error);
@@ -1097,19 +1058,90 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
         document.title = `${result.station_name} - Transit Live Departures`;
         stopName = result.station_name;
 
+        // Fetch notifications for this stop
+        if (Array.isArray(result.notifications)) {
+            if (result.notifications.length > 0) {
+                displayNotifications(result.notifications);
+            } else {
+                hideNotificationBar();
+            }
+        } else {
+            fetchNotifications(stopId);
+        }
+
         lastDepartures = result.departures;
         applyFilter();
         countdown = 30;
         updateFavoriteButton();
         updateHomeButton();
         syncUrlFromState(!isUserSearch);
-
-        // Fetch and display notifications for this stop (after stop ID is grabbed)
-        await displayNotificationsForStop(stopId);
     } catch (e) {
         console.error(e);
     } finally {
         document.getElementById("loading").style.display = "none";
+    }
+}
+
+// ------------------ NOTIFICATION BAR ------------------
+
+async function fetchNotifications(stopIdParam) {
+    if (!stopIdParam) {
+        DevLog.notification('Skipped fetch - no stopId provided');
+        hideNotificationBar();
+        return;
+    }
+    
+    try {
+        const apiUrl = `${notificationApiBaseUrl}/current_notifs?stopID=${encodeURIComponent(stopIdParam)}`;
+        DevLog.api(apiUrl, 'GET', { stopID: stopIdParam });
+        const response = await fetch(apiUrl);
+        DevLog.apiResponse('current_notifs', response.status);
+        if (!response.ok) {
+            DevLog.notification('Fetch failed - response not ok', { status: response.status });
+            hideNotificationBar();
+            return;
+        }
+        
+        const notifications = await response.json();
+        DevLog.notification('Fetched notifications', { count: notifications?.length || 0, notifications });
+        
+        if (Array.isArray(notifications) && notifications.length > 0) {
+            displayNotifications(notifications);
+        } else {
+            hideNotificationBar();
+        }
+    } catch (e) {
+        DevLog.error('NOTIFICATION', 'Error fetching notifications', e);
+        console.error("Error fetching notifications:", e);
+        hideNotificationBar();
+    }
+}
+
+function displayNotifications(notifications) {
+    const notificationBar = document.getElementById("notificationBar");
+    const notificationText = document.getElementById("notificationText");
+    const notificationContent = notificationBar?.querySelector(".notification-bar-content");
+    
+    if (!notificationBar || !notificationText || !notificationContent) return;
+    
+    // Join all notifications with a separator
+    const text = notifications.join("  •  ");
+    notificationText.textContent = text;
+    
+    notificationBar.style.display = "block";
+    
+    // Adjust animation duration based on text length
+    const textLength = text.length;
+    applyNotificationSizing();
+    const duration = updateNotificationScrollDuration(textLength);
+    DevLog.notification('Displayed notifications', { count: notifications.length, textLength, animationDuration: duration ? `${duration}s` : null });
+}
+
+function hideNotificationBar() {
+    const notificationBar = document.getElementById("notificationBar");
+    if (notificationBar) {
+        notificationBar.style.display = "none";
+        DevLog.notification('Hidden notification bar');
     }
 }
 
@@ -1158,6 +1190,8 @@ function applyFilter() {
     const lineFilter = document.getElementById("lineFilter").value.trim();
     const typeFilter = document.getElementById("typeFilter").value;
     const wheelchairFilter = document.getElementById("wheelchairFilter").checked;
+
+    DevLog.filter('Applying filters', { line: lineFilter || '(none)', type: typeFilter || '(all)', wheelchair: wheelchairFilter });
 
     // Track filter usage
     if (typeof umami !== 'undefined') {
@@ -1414,6 +1448,13 @@ window.addEventListener("click", function(event) {
         debugEditPopup.style.display = "none";
     }
 
+    const notificationEditPopup = document.getElementById("notificationEditPopup");
+    if (notificationEditPopup &&
+        notificationEditPopup.style.display === "block" &&
+        !notificationEditPopup.querySelector(".modal-content").contains(event.target)) {
+        notificationEditPopup.style.display = "none";
+    }
+
     if (stationPopup.style.display === "block" &&
         !stationPopup.querySelector(".modal-content").contains(event.target)) {
         stationPopup.style.display = "none";
@@ -1557,6 +1598,7 @@ function toggleFavorite() {
     if (index > -1) {
         // Remove from favorites
         favorites.splice(index, 1);
+        DevLog.storage('Removed from favorites', { id: stopId, name: cleanedName });
         // Track favorite removal
         if (typeof umami !== 'undefined') {
             umami.track('favorite-remove', { station: cleanedName });
@@ -1567,6 +1609,7 @@ function toggleFavorite() {
             id: stopId,
             name: cleanedName
         });
+        DevLog.storage('Added to favorites', { id: stopId, name: cleanedName });
         // Track favorite addition
         if (typeof umami !== 'undefined') {
             umami.track('favorite-add', { station: cleanedName });
@@ -1672,6 +1715,7 @@ function setHomeStation() {
         // Already home, maybe toggle off? The description says "this will then set that station as their home"
         // Let's allow unsetting if they click it again.
         localStorage.removeItem(HOME_STATION_KEY);
+        DevLog.storage('Unset home station', { id: stopId, name: cleanedName });
         // Track home station unset
         if (typeof umami !== 'undefined') {
             umami.track('home-station-unset', { station: cleanedName });
@@ -1681,6 +1725,7 @@ function setHomeStation() {
             id: stopId,
             name: cleanedName
         }));
+        DevLog.storage('Set home station', { id: stopId, name: cleanedName });
         // Track home station set
         if (typeof umami !== 'undefined') {
             umami.track('home-station-set', { station: cleanedName });
@@ -1708,6 +1753,7 @@ function updateHomeButton() {
 // ------------------ INITIALIZATION ------------------
 
 function switchTab(tabId) {
+    DevLog.ui('Tab switch', { to: tabId });
     // Update tab buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.toggle('active', btn.innerText.toLowerCase() === tabId);
@@ -1731,10 +1777,12 @@ function switchTab(tabId) {
 
 function initMap() {
     if (map) {
+        DevLog.map('Map already initialized, invalidating size');
         setTimeout(() => map.invalidateSize(), 100);
         return;
     }
 
+    DevLog.map('Initializing map', { center: [49.0069, 8.4037], zoom: 13 });
     // Centered on Karlsruhe: 49.0069, 8.4037
     map = L.map('map').setView([49.0069, 8.4037], 13);
 
@@ -1871,24 +1919,28 @@ async function resolveMapCityName(lat, lon) {
                 zoom: "10",
                 addressdetails: "1"
             });
+            DevLog.map('Nominatim reverse geocode', { lat, lon, cacheKey });
             const response = await fetch(`${MAP_CITY_NOMINATIM_URL}?${params.toString()}`, {
                 headers: {
                     "Accept": "application/json",
                     "User-Agent": getMapCityUserAgent()
                 }
             });
+            DevLog.apiResponse('Nominatim', response.status);
             if (!response.ok) {
                 const statusText = response.statusText ? ` ${response.statusText}` : "";
                 throw new Error(`Reverse geocode failed: ${response.status}${statusText}`);
             }
             const data = await response.json();
             const city = getCityFromAddress(data.address);
+            DevLog.map('Nominatim resolved city', { city, address: data.address });
             if (city) {
                 MAP_CITY_CACHE.set(cacheKey, { city, timestamp: Date.now() });
             }
             mapCityFailureCount = 0;
             return city;
         } catch (error) {
+            DevLog.error('MAP', 'Error resolving map city name', error);
             console.error("Error resolving map city name:", error);
             mapCityFailureCount += 1;
             if (mapCityFailureCount >= MAP_CITY_FAILURE_WARN_THRESHOLD) {
@@ -1943,19 +1995,23 @@ async function lookupStopByCoords(lat, lon) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
+        DevLog.api('/lookup_stop_by_coords', 'GET', { lat, lon });
         const res = await fetch(`/lookup_stop_by_coords?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`, {
             signal: controller.signal
         });
         const result = await res.json();
+        DevLog.apiResponse('/lookup_stop_by_coords', res.status, result);
         if (!res.ok || result.error) {
             throw new Error(result.error || "Failed to find nearby stop.");
         }
         return result;
     } catch (error) {
         if (error.name === "AbortError") {
+            DevLog.error('API', 'Stop lookup timed out', { lat, lon });
             throw new Error("Stop lookup timed out.");
         }
         if (error instanceof TypeError) {
+            DevLog.error('API', 'Network error in stop lookup', error);
             throw new Error(`Network error while contacting the server: ${error.message}`);
         }
         throw error;
@@ -2196,11 +2252,13 @@ async function updateOverpassMarkers() {
     `;
 
     try {
+        DevLog.map('Overpass API request', { requestId, bounds: { sw: { lat: sw.lat, lng: sw.lng }, ne: { lat: ne.lat, lng: ne.lng } } });
         const response = await fetch('https://overpass-api.de/api/interpreter', {
             method: 'POST',
             body: query
         });
         const data = await response.json();
+        DevLog.apiResponse('Overpass', response.status, { elements: data.elements?.length || 0, requestId });
 
         if (isStaleMapOverpassRequest(requestId)) {
             logStaleMapOverpassRequest(requestId);
@@ -2402,9 +2460,11 @@ async function locateNearestStation() {
 
     const btn = document.getElementById("locateMeBtn");
     btn.classList.add("active");
+    DevLog.location('Locate nearest station initiated');
 
     const findNearestStation = async (latitude, longitude) => {
         try {
+            DevLog.location('Finding nearest station', { latitude, longitude });
             // We use Overpass to find nearby public transport stops
             const query = `
                 [out:json][timeout:10];
@@ -2417,8 +2477,10 @@ async function locateNearestStation() {
                 out body;
             `;
             const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+            DevLog.api('Overpass (locate)', 'GET', { latitude, longitude, radius: 1000 });
             const res = await fetch(url);
             const data = await res.json();
+            DevLog.apiResponse('Overpass (locate)', res.status, { elements: data.elements?.length || 0 });
 
             if (!data.elements || data.elements.length === 0) {
                 showError("No stations found nearby.");
@@ -2464,24 +2526,29 @@ async function locateNearestStation() {
         if (typeof umami !== 'undefined') {
             umami.track('locate-me-dev-override');
         }
+        DevLog.location('Using dev location override', override);
         await findNearestStation(override.latitude, override.longitude);
         btn.classList.remove("active");
         return;
     }
 
     if (!navigator.geolocation) {
+        DevLog.location('Geolocation not supported');
         showError("Geolocation is not supported by your browser.");
         btn.classList.remove("active");
         return;
     }
 
+    DevLog.location('Requesting browser geolocation');
     navigator.geolocation.getCurrentPosition(
         async (position) => {
             const { latitude, longitude } = position.coords;
+            DevLog.location('Geolocation success', { latitude, longitude, accuracy: position.coords.accuracy });
             await findNearestStation(latitude, longitude);
             btn.classList.remove("active");
         },
         (error) => {
+            DevLog.error('LOCATION', 'Geolocation error', { code: error.code, message: error.message });
             console.error("Geolocation error:", error);
             showError("Could not get your location.");
             btn.classList.remove("active");
@@ -2491,6 +2558,8 @@ async function locateNearestStation() {
 }
 
 window.addEventListener("DOMContentLoaded", function() {
+    DevLog.state('Application initialized', { devMode: devModeEnabled, debugMode, hasSavedPassword: !!storedDebugPassword });
+    
     // Trigger search when user presses Enter in stop input
     document.getElementById("stopInput").addEventListener("keypress", function(event) {
         if (event.key === "Enter") {
@@ -2500,12 +2569,6 @@ window.addEventListener("DOMContentLoaded", function() {
 
     updateFavoritesDisplay();
     updateExperimentalUI();
-    
-    // Load saved announcement
-    const savedAnnouncement = localStorage.getItem(ANNOUNCEMENT_KEY);
-    if (savedAnnouncement) {
-        document.getElementById("announcementText").textContent = savedAnnouncement;
-    }
 
     // Auto-enable debug UI if dev mode is enabled or a password is saved
     if (debugMode) {
@@ -2513,6 +2576,7 @@ window.addEventListener("DOMContentLoaded", function() {
     }
 
     const urlState = getUrlStateFromPath();
+    DevLog.state('Initial URL state', urlState);
     if (urlState.mode === "map") {
         switchTab("map");
     } else if (urlState.mode === "station" && urlState.stopId) {
@@ -2521,12 +2585,14 @@ window.addEventListener("DOMContentLoaded", function() {
     } else {
         const home = getHomeStation();
         if (home) {
+            DevLog.state('Loading home station', home);
             if (home.id) {
                 quickSearchById(home.id, home.name);
             } else {
                 quickSearch(home.name);
             }
         } else {
+            DevLog.state('No home station, loading default');
             quickSearch("Hauptbahnhof Vorplatz");
         }
     }
