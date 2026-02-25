@@ -23,6 +23,28 @@ DEBUG_OVERRIDES = {}  # Format: { (stop_id, line, direction, time): { ... } }
 
 app = Flask(__name__)
 
+# ---------------- DEV MODE LOGGING ----------------
+# Configure logging for dev mode
+if DEV_MODE:
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='[%(asctime)s] [%(levelname)s] %(message)s',
+        datefmt='%H:%M:%S'
+    )
+    app.logger.setLevel(logging.DEBUG)
+    app.logger.info("Dev mode enabled - debug logging active")
+    app.logger.debug(f"Using API base URL: {BASE_URL}")
+
+
+def dev_log(category: str, message: str, data: dict = None):
+    """Log messages only in dev mode."""
+    if not DEV_MODE:
+        return
+    if data:
+        app.logger.debug(f"[{category}] {message} | {data}")
+    else:
+        app.logger.debug(f"[{category}] {message}")
+
 # ---------------- API ----------------
 
 def extract_search_locations(payload):
@@ -50,7 +72,9 @@ def extract_station_name_from_departures(departures):
     return None
 
 def get_stop_id(stop_name: str):
+    dev_log("API", f"GET {BASE_URL}/stops/search", {"q": stop_name})
     r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name}, timeout=10)
+    dev_log("API-RESPONSE", f"stops/search returned {r.status_code}", {"results": len(extract_search_locations(r.json())) if r.ok else 0})
     r.raise_for_status()
     stops = extract_search_locations(r.json())
     if not stops:
@@ -61,7 +85,9 @@ def get_stop_name_by_id(stop_id: str):
     if not stop_id:
         return None
     try:
+        dev_log("API", f"GET {BASE_URL}/stops/search (by ID)", {"q": stop_id})
         r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_id}, timeout=10)
+        dev_log("API-RESPONSE", f"stops/search returned {r.status_code}")
         r.raise_for_status()
         stops = extract_search_locations(r.json())
         fallback_name = None
@@ -78,24 +104,31 @@ def get_stop_name_by_id(stop_id: str):
                         fallback_name = value
         if fallback_name:
             return fallback_name
-    except requests.RequestException:
+    except requests.RequestException as e:
+        dev_log("API-ERROR", f"Failed to get stop name by ID", {"stop_id": stop_id, "error": str(e)})
         pass
 
     try:
+        dev_log("DB", "Querying stops table for stop_name", {"stop_id": stop_id})
         with closing(get_db_connection()) as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT stop_name FROM stops WHERE stop_id = %s LIMIT 1;", (stop_id,))
                 row = cur.fetchone()
                 if row and row[0]:
+                    dev_log("DB-RESPONSE", "Found stop name in database", {"stop_name": row[0]})
                     return row[0]
-    except (FileNotFoundError, ValueError, psycopg2.Error):
+    except (FileNotFoundError, ValueError, psycopg2.Error) as e:
+        dev_log("DB-ERROR", "Failed to query database", {"error": str(e)})
         return None
     return None
 
 def get_stop_departures(stop_id: str):
+    dev_log("API", f"GET {BASE_URL}/stops/{stop_id}", {"detailed": "1", "delay": "1"})
     r = requests.get(f"{BASE_URL}/stops/{stop_id}", params={"detailed": "1", "delay": "1"}, timeout=10)
+    result = r.json()
+    dev_log("API-RESPONSE", f"stops/{stop_id} returned {r.status_code}", {"departures": len(result) if isinstance(result, list) else 0})
     r.raise_for_status()
-    return r.json()
+    return result
 
 def load_db_connection_config(path: str = DB_CONNECTION_PATH):
     if not os.path.exists(path):
@@ -208,9 +241,11 @@ def search():
     stop_name = request.args.get("stop")
 
     if not stop_name:
+        dev_log("ROUTE", "/search called without stop parameter")
         return jsonify({"error": "Stop name required"}), 400
 
     stop_name_input = stop_name.strip()
+    dev_log("ROUTE", f"/search called", {"stop": stop_name_input})
     
     current_query = stop_name_input
     stops = []
@@ -220,9 +255,11 @@ def search():
         while len(current_query) >= 3:
             stop_name_api = current_query.replace(" ", "_")
             # Pull all matching stops from the API
+            dev_log("API", f"GET {BASE_URL}/stops/search", {"q": stop_name_api})
             r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name_api}, timeout=10)
             r.raise_for_status()
             stops = extract_search_locations(r.json())
+            dev_log("API-RESPONSE", f"stops/search returned {r.status_code}", {"results": len(stops)})
             
             if stops:
                 break
@@ -232,6 +269,7 @@ def search():
             # but the requirement says "untill the api returns a station id", 
             # and "removing the last one or two letters ... depending on its length"
             # I will remove 1 at a time to be safe and thorough.
+            dev_log("SEARCH", f"No results for '{current_query}', trimming last character")
             current_query = current_query[:-1]
             modified = True
 
@@ -327,7 +365,10 @@ def search_by_id():
     station_name = request.args.get("station_name")
 
     if not stop_id:
+        dev_log("ROUTE", "/search_by_id called without stop_id")
         return jsonify({"error": "Stop ID required"}), 400
+
+    dev_log("ROUTE", f"/search_by_id called", {"stop_id": stop_id, "station_name": station_name})
 
     try:
         data = get_stop_departures(stop_id)
@@ -410,6 +451,7 @@ def search_by_id():
 def lookup_stop_by_coords():
     lat = request.args.get("lat")
     lon = request.args.get("lon")
+    dev_log("ROUTE", "/lookup_stop_by_coords called", {"lat": lat, "lon": lon})
     if lat is None or lon is None:
         return jsonify({"error": "Latitude and longitude required"}), 400
 
@@ -417,23 +459,30 @@ def lookup_stop_by_coords():
         lat = float(lat)
         lon = float(lon)
     except (TypeError, ValueError):
+        dev_log("ROUTE-ERROR", "Invalid coordinates provided", {"lat": lat, "lon": lon})
         return jsonify({"error": "Invalid coordinates"}), 400
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        dev_log("ROUTE-ERROR", "Coordinates out of range", {"lat": lat, "lon": lon})
         return jsonify({"error": "Coordinates out of range"}), 400
 
     try:
+        dev_log("DB", "Finding nearest stop", {"lat": lat, "lon": lon, "radius": MAP_STOP_SEARCH_RADIUS_METERS})
         stop = find_nearest_stop(lat, lon)
         if not stop:
+            dev_log("DB-RESPONSE", "No nearby stop found")
             return jsonify({"error": "No nearby stop found"}), 404
+        dev_log("DB-RESPONSE", "Found nearest stop", stop)
         return jsonify({
             "stop_id": stop["stop_id"],
             "stop_name": stop["stop_name"],
             "distance_meters": stop["distance_meters"]
         })
     except (FileNotFoundError, ValueError) as e:
+        dev_log("DB-ERROR", "Error finding nearest stop (file/value error)", {"error": str(e)})
         logging.exception("Error finding nearest stop (file/value error)")
         return jsonify({"error": "Service temporarily unavailable"}), 503
     except Exception as e:
+        dev_log("DB-ERROR", "Unexpected error in lookup_stop_by_coords", {"error": str(e)})
         logging.exception("Unexpected error in lookup_stop_by_coords")
         return jsonify({"error": "An internal error has occurred"}), 500
 
@@ -443,8 +492,11 @@ def lookup_stop_by_coords():
 @app.route("/debug/login", methods=["POST"])
 def debug_login():
     password = request.json.get("password")
+    dev_log("DEBUG", "/debug/login attempt")
     if password == DEBUG_PASSWORD:
+        dev_log("DEBUG", "/debug/login successful")
         return jsonify({"success": True})
+    dev_log("DEBUG", "/debug/login failed - invalid password")
     return jsonify({"success": False, "error": "Invalid password"}), 401
 
 
@@ -453,6 +505,7 @@ def debug_update():
     # Basic check for password (simplified for debug purposes, should be token-based in real app)
     password = request.headers.get("X-Debug-Password")
     if not (password == DEBUG_PASSWORD or (DEV_MODE and password == "dev-mode")):
+        dev_log("DEBUG", "/debug/update unauthorized attempt")
         return jsonify({"error": "Unauthorized"}), 401
 
     data = request.json
@@ -460,6 +513,8 @@ def debug_update():
     line = data.get("line")
     direction = data.get("direction")
     stable_scheduled_time = data.get("stable_scheduled_time")
+
+    dev_log("DEBUG", "/debug/update called", {"stop_id": stop_id, "line": line, "direction": direction})
 
     if any(v is None for v in [stop_id, line, direction, stable_scheduled_time]):
         return jsonify({"error": "Missing parameters"}), 400
@@ -480,8 +535,10 @@ def debug_update():
     
     if overrides:
         DEBUG_OVERRIDES[override_key] = overrides
+        dev_log("DEBUG", f"Added override", {"key": override_key, "overrides": overrides})
     elif override_key in DEBUG_OVERRIDES:
         del DEBUG_OVERRIDES[override_key]
+        dev_log("DEBUG", f"Removed override", {"key": override_key})
 
     return jsonify({"success": True, "overrides": DEBUG_OVERRIDES})
 
@@ -490,9 +547,12 @@ def debug_update():
 def debug_clear():
     password = request.headers.get("X-Debug-Password")
     if not (password == DEBUG_PASSWORD or (DEV_MODE and password == "dev-mode")):
+        dev_log("DEBUG", "/debug/clear unauthorized attempt")
         return jsonify({"error": "Unauthorized"}), 401
     
+    count = len(DEBUG_OVERRIDES)
     DEBUG_OVERRIDES.clear()
+    dev_log("DEBUG", f"/debug/clear - cleared {count} overrides")
     return jsonify({"success": True})
 
 
