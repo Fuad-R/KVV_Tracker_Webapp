@@ -961,10 +961,8 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
         document.title = `${result.station_name} - Transit Live Departures`;
         stopName = result.station_name;
 
-        // Fetch notifications when user initiates a search
-        if (isUserSearch) {
-            fetchNotifications(stopId);
-        }
+        // Fetch notifications for this stop
+        fetchNotifications(stopId);
 
         lastDepartures = result.departures;
         applyFilter();
