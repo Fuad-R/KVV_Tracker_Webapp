@@ -808,6 +808,113 @@ body.dark-mode .wheelchair-emoji {
     font-size: 14px;
 }
 
+/* ==================== SKELETON LOADING ==================== */
+
+@keyframes skeleton-shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+}
+
+.skeleton-bone {
+    background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
+    background-size: 800px 100%;
+    animation: skeleton-shimmer 1.5s infinite ease-in-out;
+    border-radius: 4px;
+}
+
+.skeleton-platform-column {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+}
+
+.skeleton-platform-header {
+    background: #c30a37;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.skeleton-platform-header .skeleton-bone {
+    background: linear-gradient(90deg, rgba(255,255,255,0.15) 25%, rgba(255,255,255,0.3) 50%, rgba(255,255,255,0.15) 75%);
+    background-size: 800px 100%;
+    animation: skeleton-shimmer 1.5s infinite ease-in-out;
+}
+
+.skeleton-platform-title {
+    height: 14px;
+    width: 100px;
+    border-radius: 4px;
+}
+
+.skeleton-platform-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+}
+
+.skeleton-card {
+    background-color: var(--bg-primary);
+    border-bottom: 1px solid var(--border);
+    border-left: 4px solid var(--bg-tertiary);
+    padding: 16px;
+}
+
+.skeleton-card:last-child {
+    border-bottom: none;
+}
+
+.skeleton-line-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.skeleton-line-content {
+    flex-grow: 1;
+}
+
+.skeleton-line-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.skeleton-line-number {
+    height: 18px;
+    width: 50px;
+}
+
+.skeleton-direction {
+    height: 13px;
+    width: 140px;
+    margin-top: 4px;
+}
+
+.skeleton-time-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+}
+
+.skeleton-departure-time {
+    height: 24px;
+    width: 80px;
+}
+
+.skeleton-realtime-badge {
+    height: 22px;
+    width: 60px;
+    border-radius: 6px;
+}
+
 /* ==================== DEPARTURES GRID ==================== */
 
 .departures-section {
