@@ -906,7 +906,7 @@ function updateNow() {
 
 async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
     if (updatesPaused && !ignorePaused) return;
-    document.getElementById("loading").style.display = "block";
+    showSkeletonLoading();
     closeError();
     
     if (searchTimeout) {
@@ -1011,7 +1011,7 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
     } catch (e) {
         console.error(e);
     } finally {
-        document.getElementById("loading").style.display = "none";
+        hideSkeletonLoading();
     }
 }
 
@@ -1019,7 +1019,7 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
 
 async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     if (updatesPaused && !ignorePaused) return;
-    document.getElementById("loading").style.display = "block";
+    showSkeletonLoading();
     closeError();
 
     if (searchTimeout) {
@@ -1078,7 +1078,7 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     } catch (e) {
         console.error(e);
     } finally {
-        document.getElementById("loading").style.display = "none";
+        hideSkeletonLoading();
     }
 }
 
@@ -1245,6 +1245,47 @@ function applyFilter() {
 }
 
 // ------------------ TABLE ------------------
+
+function showSkeletonLoading() {
+    const grid = document.getElementById("skeletonGrid");
+    grid.innerHTML = "";
+    const platformCount = 3;
+    const cardsPerPlatform = 4;
+    for (let p = 0; p < platformCount; p++) {
+        const col = document.createElement("div");
+        col.className = "skeleton-platform-column";
+        let html = `
+            <div class="skeleton-platform-header">
+                <div class="skeleton-bone skeleton-platform-title"></div>
+                <div class="skeleton-bone skeleton-platform-icon"></div>
+            </div>
+        `;
+        for (let c = 0; c < cardsPerPlatform; c++) {
+            html += `
+                <div class="skeleton-card">
+                    <div class="skeleton-line-info">
+                        <div class="skeleton-bone skeleton-line-icon"></div>
+                        <div class="skeleton-line-content">
+                            <div class="skeleton-bone skeleton-line-number"></div>
+                            <div class="skeleton-bone skeleton-direction"></div>
+                        </div>
+                    </div>
+                    <div class="skeleton-time-section">
+                        <div class="skeleton-bone skeleton-departure-time"></div>
+                        <div class="skeleton-bone skeleton-realtime-badge"></div>
+                    </div>
+                </div>
+            `;
+        }
+        col.innerHTML = html;
+        grid.appendChild(col);
+    }
+    document.getElementById("loading").style.display = "block";
+}
+
+function hideSkeletonLoading() {
+    document.getElementById("loading").style.display = "none";
+}
 
 function populateTable(data) {
     const grid = document.getElementById("departuresGrid");
