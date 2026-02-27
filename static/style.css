@@ -1347,6 +1347,24 @@ body.dark-mode .wheelchair-emoji {
     letter-spacing: 0.5px;
 }
 
+.favorites-collapse-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.favorites-chevron {
+    transition: transform 0.2s;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
+.favorites-chevron.collapsed {
+    transform: rotate(-90deg);
+}
+
 .favorites-menu-btn {
     background: transparent;
     border: none;

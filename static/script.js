@@ -81,6 +81,7 @@ let isRefreshingMapMarkers = false;
 let mapOverpassRequestId = 0;
 const mapOverpassActiveRequests = new Set();
 const FAVORITES_KEY = 'transit_favorites';
+const FAVORITES_COLLAPSED_KEY = 'transit_favorites_collapsed';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
@@ -92,6 +93,7 @@ const NOTIFICATION_SETTINGS_DEFAULTS = {
 let notificationSettings = { ...NOTIFICATION_SETTINGS_DEFAULTS };
 const APP_STORAGE_KEYS = [
     FAVORITES_KEY,
+    FAVORITES_COLLAPSED_KEY,
     HOME_STATION_KEY,
     EXPERIMENTAL_KEY,
     DEV_LOCATION_KEY,
@@ -1675,9 +1677,19 @@ function updateFavoriteButton() {
 }
 
 let favoritesEditMode = false;
+let favoritesCollapsed = localStorage.getItem(FAVORITES_COLLAPSED_KEY) === 'true';
 
 function toggleFavoritesEditMode() {
     favoritesEditMode = !favoritesEditMode;
+    updateFavoritesDisplay();
+}
+
+function toggleFavoritesCollapsed() {
+    favoritesCollapsed = !favoritesCollapsed;
+    localStorage.setItem(FAVORITES_COLLAPSED_KEY, favoritesCollapsed);
+    if (favoritesCollapsed) {
+        favoritesEditMode = false;
+    }
     updateFavoritesDisplay();
 }
 
@@ -1685,6 +1697,8 @@ function updateFavoritesDisplay() {
     const favorites = getFavorites();
     const section = document.getElementById('favoritesSection');
     const grid = document.getElementById('favoritesGrid');
+    const chevron = document.getElementById('favoritesChevron');
+    const menuBtn = document.getElementById('favoritesMenuBtn');
 
     if (favorites.length === 0) {
         favoritesEditMode = false;
@@ -1693,10 +1707,26 @@ function updateFavoritesDisplay() {
     }
 
     section.style.display = 'block';
+
+    // Update collapse state
+    const header = section.querySelector('.favorites-header');
+    if (chevron) {
+        chevron.classList.toggle('collapsed', favoritesCollapsed);
+    }
+    if (header) {
+        header.style.marginBottom = favoritesCollapsed ? '0' : '';
+    }
+    if (favoritesCollapsed) {
+        grid.style.display = 'none';
+        if (menuBtn) menuBtn.style.display = 'none';
+        return;
+    }
+
+    grid.style.display = '';
+    if (menuBtn) menuBtn.style.display = '';
     grid.innerHTML = '';
 
     // Update the three-dot menu button state
-    const menuBtn = document.getElementById('favoritesMenuBtn');
     if (menuBtn) {
         menuBtn.classList.toggle('active', favoritesEditMode);
     }
