@@ -1,4 +1,4 @@
-# Self-Hosted PocketBase vs Appwrite for KVV Tracker Webapp
+# PocketBase vs Appwrite vs Supabase for KVV Tracker Webapp
 
 ## Current Architecture Snapshot
 - **Backend:** Flask (`app.py`) serving HTML/JS and exposing endpoints like `/search`, `/search_by_id`, `/lookup_stop_by_coords`, and debug endpoints.
@@ -33,6 +33,26 @@ Challenges:
 - Heavier deployment footprint (typically Docker stack, more moving parts).
 - Higher operational complexity relative to current app size and requirements.
 
+### Supabase (self-hosted)
+**Feasibility: Medium** for this project, with strong capability but higher setup/ops weight than PocketBase.
+
+Why:
+- Postgres-first platform with auth, storage, realtime, and edge functions; aligns well with data-heavy product evolution.
+- Good fit if this app later needs robust relational modeling, SQL analytics, and policy-driven access control.
+- Can coexist with current optional PostgreSQL usage pattern conceptually, reducing database paradigm switching.
+
+Challenges:
+- Self-hosting Supabase is significantly heavier than PocketBase (multiple services and operational tuning).
+- More platform complexity than currently needed for a transit viewer that mainly reads from an external API.
+
+## Direct Comparison (for this webapp)
+
+| Platform | Feasibility (current app) | Operational Overhead | Best Fit Trigger |
+| --- | --- | --- | --- |
+| PocketBase | High | Low | Fast, lightweight rollout for synced user preferences/accounts |
+| Appwrite | Medium-High | Medium-High | Broad backend feature needs (teams, permissions, functions, storage) |
+| Supabase (self-hosted) | Medium | High | Postgres-centric product roadmap with richer relational data and policy control |
+
 ## Usefulness for This Webapp
 
 ### Immediate usefulness (today)
@@ -56,14 +76,20 @@ Challenges:
 ### Platform outlook
 - **PocketBase:** Best near-term choice if priority is simplicity, speed, and low ops burden.
 - **Appwrite:** Better long-term choice if expecting larger scale, stricter governance, and more backend features.
+- **Supabase (self-hosted):** Strong long-term option when PostgreSQL depth (RLS, SQL analytics, relational modeling) is a core product requirement.
 
 ## Recommendation
 
-For this project’s current shape, **self-hosted PocketBase is the more practical first step** if introducing a backend product at all, because it aligns with lightweight operations and incremental adoption.
+For this project’s current shape, **PocketBase is still the most practical first step** if introducing a backend product at all, because it aligns with lightweight operations and incremental adoption.
 
 Choose **Appwrite** instead if there is a clear roadmap toward:
 - complex auth/authorization models,
 - team/multi-tenant features,
 - broader backend service composition (functions/storage/integrations) where platform breadth outweighs operational cost.
 
-In short: both are feasible, but **utility depends on whether the app evolves from local-state transit viewer to account-centric product**.
+Choose **Supabase (self-hosted)** instead if the roadmap is strongly PostgreSQL-centric and requires:
+- rich relational schema evolution and SQL-native workflows,
+- row-level security-heavy authorization patterns,
+- deeper analytics/reporting on product-owned user data.
+
+In short: all three are feasible, but **utility depends on whether the app evolves from local-state transit viewer to account-centric and data-rich product**.
