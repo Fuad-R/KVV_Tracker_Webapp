@@ -1709,6 +1709,12 @@ function updateFavoritesDisplay() {
         btn.className = 'favorite-quick-btn';
         btn.innerText = fav.name;
         btn.title = fav.name;
+
+        if (favoritesEditMode) {
+            btn.classList.add('favorite-edit-mode');
+            btn.style.paddingRight = '35px';
+        }
+
         btn.onclick = () => {
             if (favoritesEditMode) return;
             // Track favorite quick button click

@@ -1430,8 +1430,9 @@ body.dark-mode .wheelchair-emoji {
     background-color: rgba(255, 82, 82, 0.1);
 }
 
-.favorite-btn-wrapper:has(.remove-favorite-x) .favorite-quick-btn {
-    padding-right: 35px;
+.favorite-quick-btn.favorite-edit-mode {
+    cursor: default;
+    opacity: 0.8;
 }
 
 
