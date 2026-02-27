@@ -1714,7 +1714,7 @@ function updateFavoritesDisplay() {
         chevron.classList.toggle('collapsed', favoritesCollapsed);
     }
     if (header) {
-        header.style.marginBottom = favoritesCollapsed ? '0' : '';
+        header.classList.toggle('collapsed', favoritesCollapsed);
     }
     if (favoritesCollapsed) {
         grid.style.display = 'none';

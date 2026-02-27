@@ -1338,6 +1338,10 @@ body.dark-mode .wheelchair-emoji {
     margin-bottom: 12px;
 }
 
+.favorites-header.collapsed {
+    margin-bottom: 0;
+}
+
 .favorites-header h3 {
     margin: 0;
     font-size: 14px;

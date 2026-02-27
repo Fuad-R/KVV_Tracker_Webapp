@@ -118,7 +118,7 @@
                 <!-- Favorites Section -->
                 <div class="favorites-section" id="favoritesSection" style="display: none;">
                     <div class="favorites-header">
-                        <div class="favorites-collapse-toggle" onclick="toggleFavoritesCollapsed()" title="Collapse/expand favorites">
+                        <div class="favorites-collapse-toggle" onclick="toggleFavoritesCollapsed()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleFavoritesCollapsed()}" role="button" tabindex="0" title="Collapse/expand favorites">
                             <svg class="favorites-chevron" id="favoritesChevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                                 <polyline points="6 9 12 15 18 9"></polyline>
                             </svg>
