@@ -1338,6 +1338,10 @@ body.dark-mode .wheelchair-emoji {
     margin-bottom: 12px;
 }
 
+.favorites-header.collapsed {
+    margin-bottom: 0;
+}
+
 .favorites-header h3 {
     margin: 0;
     font-size: 14px;
@@ -1345,6 +1349,47 @@ body.dark-mode .wheelchair-emoji {
     color: var(--text-primary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+.favorites-collapse-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.favorites-chevron {
+    transition: transform 0.2s;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
+.favorites-chevron.collapsed {
+    transform: rotate(-90deg);
+}
+
+.favorites-menu-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.favorites-menu-btn:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-tertiary);
+}
+
+.favorites-menu-btn.active {
+    color: var(--primary);
+    background-color: var(--bg-tertiary);
 }
 
 .favorites-grid {
@@ -1361,7 +1406,7 @@ body.dark-mode .wheelchair-emoji {
 
 .favorite-quick-btn {
     flex: 1;
-    padding: 10px 35px 10px 12px;
+    padding: 10px 12px;
     background-color: var(--bg-primary);
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -1405,6 +1450,11 @@ body.dark-mode .wheelchair-emoji {
 .remove-favorite-x:hover {
     color: var(--danger);
     background-color: rgba(255, 82, 82, 0.1);
+}
+
+.favorite-quick-btn.favorite-edit-mode {
+    cursor: default;
+    opacity: 0.8;
 }
 
 
@@ -1674,7 +1724,7 @@ tr:hover {
     }
 
     .favorite-quick-btn {
-        padding: 8px 30px 8px 10px;
+        padding: 8px 10px;
         font-size: 12px;
     }
 }
@@ -1686,7 +1736,7 @@ tr:hover {
     }
 
     .favorite-quick-btn {
-        padding: 8px 30px 8px 10px;
+        padding: 8px 10px;
         font-size: 11px;
     }
 

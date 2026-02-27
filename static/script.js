@@ -81,6 +81,7 @@ let isRefreshingMapMarkers = false;
 let mapOverpassRequestId = 0;
 const mapOverpassActiveRequests = new Set();
 const FAVORITES_KEY = 'transit_favorites';
+const FAVORITES_COLLAPSED_KEY = 'transit_favorites_collapsed';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
@@ -92,6 +93,7 @@ const NOTIFICATION_SETTINGS_DEFAULTS = {
 let notificationSettings = { ...NOTIFICATION_SETTINGS_DEFAULTS };
 const APP_STORAGE_KEYS = [
     FAVORITES_KEY,
+    FAVORITES_COLLAPSED_KEY,
     HOME_STATION_KEY,
     EXPERIMENTAL_KEY,
     DEV_LOCATION_KEY,
@@ -1605,8 +1607,8 @@ function saveFavorites(favorites) {
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
 }
 
-function isFavorite(id, name) {
-    return getFavorites().some(fav => fav.id === id && fav.name === name);
+function isFavorite(id) {
+    return getFavorites().some(fav => fav.id === id);
 }
 
 // Helper function to clean station name (display city info after comma)
@@ -1633,27 +1635,26 @@ function toggleFavorite() {
     }
 
     const favorites = getFavorites();
-    const cleanedName = cleanStationName(stopName);
-    const index = favorites.findIndex(fav => fav.id === stopId && fav.name === cleanedName);
+    const index = favorites.findIndex(fav => fav.id === stopId);
 
     if (index > -1) {
         // Remove from favorites
         favorites.splice(index, 1);
-        DevLog.storage('Removed from favorites', { id: stopId, name: cleanedName });
+        DevLog.storage('Removed from favorites', { id: stopId, name: stopName });
         // Track favorite removal
         if (typeof umami !== 'undefined') {
-            umami.track('favorite-remove', { station: cleanedName });
+            umami.track('favorite-remove', { station: stopName });
         }
     } else {
-        // Add to favorites with cleaned station name and ID from API
+        // Add to favorites with full station name and ID from API
         favorites.push({
             id: stopId,
-            name: cleanedName
+            name: stopName
         });
-        DevLog.storage('Added to favorites', { id: stopId, name: cleanedName });
+        DevLog.storage('Added to favorites', { id: stopId, name: stopName });
         // Track favorite addition
         if (typeof umami !== 'undefined') {
-            umami.track('favorite-add', { station: cleanedName });
+            umami.track('favorite-add', { station: stopName });
         }
     }
 
@@ -1664,8 +1665,7 @@ function toggleFavorite() {
 
 function updateFavoriteButton() {
     const btn = document.getElementById('favoriteBtn');
-    const cleanedName = cleanStationName(stopName);
-    const isFav = isFavorite(stopId, cleanedName);
+    const isFav = isFavorite(stopId);
 
     if (isFav) {
         btn.classList.add('favorite-active');
@@ -1676,18 +1676,60 @@ function updateFavoriteButton() {
     }
 }
 
+let favoritesEditMode = false;
+let favoritesCollapsed = localStorage.getItem(FAVORITES_COLLAPSED_KEY) === 'true';
+
+function toggleFavoritesEditMode() {
+    favoritesEditMode = !favoritesEditMode;
+    updateFavoritesDisplay();
+}
+
+function toggleFavoritesCollapsed() {
+    favoritesCollapsed = !favoritesCollapsed;
+    localStorage.setItem(FAVORITES_COLLAPSED_KEY, favoritesCollapsed);
+    if (favoritesCollapsed) {
+        favoritesEditMode = false;
+    }
+    updateFavoritesDisplay();
+}
+
 function updateFavoritesDisplay() {
     const favorites = getFavorites();
     const section = document.getElementById('favoritesSection');
     const grid = document.getElementById('favoritesGrid');
+    const chevron = document.getElementById('favoritesChevron');
+    const menuBtn = document.getElementById('favoritesMenuBtn');
 
     if (favorites.length === 0) {
+        favoritesEditMode = false;
         section.style.display = 'none';
         return;
     }
 
     section.style.display = 'block';
+
+    // Update collapse state
+    const header = section.querySelector('.favorites-header');
+    if (chevron) {
+        chevron.classList.toggle('collapsed', favoritesCollapsed);
+    }
+    if (header) {
+        header.classList.toggle('collapsed', favoritesCollapsed);
+    }
+    if (favoritesCollapsed) {
+        grid.style.display = 'none';
+        if (menuBtn) menuBtn.style.display = 'none';
+        return;
+    }
+
+    grid.style.display = '';
+    if (menuBtn) menuBtn.style.display = '';
     grid.innerHTML = '';
+
+    // Update the three-dot menu button state
+    if (menuBtn) {
+        menuBtn.classList.toggle('active', favoritesEditMode);
+    }
 
     favorites.forEach((fav, index) => {
         const btnWrapper = document.createElement('div');
@@ -1697,7 +1739,14 @@ function updateFavoritesDisplay() {
         btn.className = 'favorite-quick-btn';
         btn.innerText = fav.name;
         btn.title = fav.name;
+
+        if (favoritesEditMode) {
+            btn.classList.add('favorite-edit-mode');
+            btn.style.paddingRight = '35px';
+        }
+
         btn.onclick = () => {
+            if (favoritesEditMode) return;
             // Track favorite quick button click
             if (typeof umami !== 'undefined') {
                 umami.track('favorite-quick-button', { station: fav.name });
@@ -1705,17 +1754,20 @@ function updateFavoritesDisplay() {
             quickSearchById(fav.id, fav.name);
         };
 
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'remove-favorite-x';
-        removeBtn.innerHTML = '×';
-        removeBtn.title = 'Remove from favorites';
-        removeBtn.onclick = (e) => {
-            e.stopPropagation();
-            removeFavorite(index);
-        };
-
         btnWrapper.appendChild(btn);
-        btnWrapper.appendChild(removeBtn);
+
+        if (favoritesEditMode) {
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-favorite-x';
+            removeBtn.innerHTML = '×';
+            removeBtn.title = 'Remove from favorites';
+            removeBtn.onclick = (e) => {
+                e.stopPropagation();
+                removeFavorite(index);
+            };
+            btnWrapper.appendChild(removeBtn);
+        }
+
         grid.appendChild(btnWrapper);
     });
 }
