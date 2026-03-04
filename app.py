@@ -1,6 +1,8 @@
 from flask import Flask, render_template, jsonify, request
 from contextlib import closing
 import os
+import re
+import secrets
 import psycopg2
 import requests
 from datetime import datetime, timedelta
@@ -8,20 +10,51 @@ import logging
 
 TRANSIT_APP = "Transit App"
 
-#balls
 DEV_MODE = (os.getenv("dev") or os.getenv("DEV") or "false").strip().lower() == "true"
 BASE_URL = "https://transitapi-dev.fuadserver.uk/api" if DEV_MODE else "https://transitapi.fuadserver.uk/api"
 MAX_MINUTES = 30
-# Map stop lookup radius (300m) to match map selection requirements.
+# Map stop lookup radius (500m) to match map selection requirements.
 MAP_STOP_SEARCH_RADIUS_METERS = 500
 DB_CONNECTION_PATH = "/config/db_connection.txt"
 REQUIRED_DB_SETTINGS = {"host", "port", "dbname", "user", "password"}
 
-DEBUG_PASSWORD = "fuadsux"
-#enter debug mode by typing test-dev-debug in station search
+# Debug password must be set via environment variable (DEBUG_PASSWORD).
+# enter debug mode by typing test-dev-debug in station search
+DEBUG_PASSWORD = os.getenv("DEBUG_PASSWORD", "")
+if not DEBUG_PASSWORD:
+    logging.warning(
+        "DEBUG_PASSWORD environment variable is not set. "
+        "Debug endpoints will be inaccessible until a password is configured."
+    )
 DEBUG_OVERRIDES = {}  # Format: { (stop_id, line, direction, time): { ... } }
 
+# Stop ID validation pattern: alphanumeric IDs with optional separators
+STOP_ID_PATTERN = re.compile(r"^[a-zA-Z0-9:_\-\.]{1,64}$")
+
 app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY", secrets.token_hex(32))
+
+
+# ---------------- SECURITY HEADERS ----------------
+@app.after_request
+def set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(self)"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://unpkg.com https://umami.fuadserver.uk; "
+        "style-src 'self' 'unsafe-inline' https://unpkg.com; "
+        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.tile-cyclosm.openstreetmap.fr https://tiles.openrailwaymap.org; "
+        "connect-src 'self' https://overpass-api.de https://nominatim.openstreetmap.org https://umami.fuadserver.uk; "
+        "font-src 'self'; "
+        "frame-ancestors 'none';"
+    )
+    if not DEV_MODE:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
 
 # ---------------- DEV MODE LOGGING ----------------
 # Configure logging for dev mode
@@ -44,6 +77,11 @@ def dev_log(category: str, message: str, data: dict = None):
         app.logger.debug(f"[{category}] {message} | {data}")
     else:
         app.logger.debug(f"[{category}] {message}")
+
+
+def is_valid_stop_id(stop_id: str) -> bool:
+    """Validate stop ID format to prevent injection via external API calls."""
+    return bool(stop_id and STOP_ID_PATTERN.match(stop_id))
 
 # ---------------- API ----------------
 
@@ -370,8 +408,8 @@ def search():
         return jsonify(response_data)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+        logging.exception("Unexpected error in /search")
+        return jsonify({"error": "An internal error has occurred"}), 500
 
 @app.route("/search_by_id")
 def search_by_id():
@@ -381,6 +419,10 @@ def search_by_id():
     if not stop_id:
         dev_log("ROUTE", "/search_by_id called without stop_id")
         return jsonify({"error": "Stop ID required"}), 400
+
+    if not is_valid_stop_id(stop_id):
+        dev_log("ROUTE", "/search_by_id called with invalid stop_id", {"stop_id": stop_id})
+        return jsonify({"error": "Invalid Stop ID format"}), 400
 
     dev_log("ROUTE", f"/search_by_id called", {"stop_id": stop_id, "station_name": station_name})
 
@@ -464,10 +506,8 @@ def search_by_id():
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/lookup_stop_by_coords")
+        logging.exception("Unexpected error in /search_by_id")
+        return jsonify({"error": "An internal error has occurred"}), 500
 def lookup_stop_by_coords():
     lat = request.args.get("lat")
     lon = request.args.get("lon")
@@ -509,11 +549,21 @@ def lookup_stop_by_coords():
 
 # ---------------- DEBUG ENDPOINTS ----------------
 
+def _check_debug_password(password):
+    """Verify a debug password using constant-time comparison."""
+    if not DEBUG_PASSWORD:
+        return False
+    return secrets.compare_digest(password or "", DEBUG_PASSWORD)
+
+
 @app.route("/debug/login", methods=["POST"])
 def debug_login():
-    password = request.json.get("password")
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"success": False, "error": "Invalid request"}), 400
+    password = body.get("password", "")
     dev_log("DEBUG", "/debug/login attempt")
-    if password == DEBUG_PASSWORD:
+    if _check_debug_password(password):
         dev_log("DEBUG", "/debug/login successful")
         return jsonify({"success": True})
     dev_log("DEBUG", "/debug/login failed - invalid password")
@@ -522,13 +572,14 @@ def debug_login():
 
 @app.route("/debug/update", methods=["POST"])
 def debug_update():
-    # Basic check for password (simplified for debug purposes, should be token-based in real app)
-    password = request.headers.get("X-Debug-Password")
-    if not (password == DEBUG_PASSWORD or (DEV_MODE and password == "dev-mode")):
+    password = request.headers.get("X-Debug-Password", "")
+    if not (_check_debug_password(password) or (DEV_MODE and password == "dev-mode")):
         dev_log("DEBUG", "/debug/update unauthorized attempt")
         return jsonify({"error": "Unauthorized"}), 401
 
-    data = request.json
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
     stop_id = data.get("stop_id")
     line = data.get("line")
     direction = data.get("direction")
@@ -565,8 +616,8 @@ def debug_update():
 
 @app.route("/debug/clear", methods=["POST"])
 def debug_clear():
-    password = request.headers.get("X-Debug-Password")
-    if not (password == DEBUG_PASSWORD or (DEV_MODE and password == "dev-mode")):
+    password = request.headers.get("X-Debug-Password", "")
+    if not (_check_debug_password(password) or (DEV_MODE and password == "dev-mode")):
         dev_log("DEBUG", "/debug/clear unauthorized attempt")
         return jsonify({"error": "Unauthorized"}), 401
     
