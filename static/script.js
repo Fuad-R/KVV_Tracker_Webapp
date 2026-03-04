@@ -1409,7 +1409,7 @@ function populateTable(data) {
                     : '';
 
                 const debugEditBtn = debugMode
-                    ? `<button class="debug-edit-btn" onclick="event.stopPropagation(); openDebugEdit('${escapeHtml(d.stop_id)}', '${escapeHtml(d.line)}', '${escapeHtml(d.direction)}', '${escapeHtml(d.stable_scheduled_time)}', ${parseInt(d.minutes_remaining) || 0}, ${parseInt(d.delay) || 0})">✎</button>`
+                    ? `<button class="debug-edit-btn" data-stop-id="${escapeHtml(d.stop_id)}" data-line="${escapeHtml(d.line)}" data-direction="${escapeHtml(d.direction)}" data-scheduled-time="${escapeHtml(d.stable_scheduled_time)}" data-minutes="${parseInt(d.minutes_remaining) || 0}" data-delay="${parseInt(d.delay) || 0}">✎</button>`
                     : '';
 
                 card.innerHTML = `
@@ -1428,6 +1428,22 @@ function populateTable(data) {
                         ${realtimeBadge}
                     </div>
                 `;
+
+                // Attach debug edit handler via addEventListener instead of inline onclick
+                const editBtn = card.querySelector('.debug-edit-btn');
+                if (editBtn) {
+                    editBtn.addEventListener('click', function(event) {
+                        event.stopPropagation();
+                        openDebugEdit(
+                            this.dataset.stopId,
+                            this.dataset.line,
+                            this.dataset.direction,
+                            this.dataset.scheduledTime,
+                            parseInt(this.dataset.minutes) || 0,
+                            parseInt(this.dataset.delay) || 0
+                        );
+                    });
+                }
 
                 platformColumn.appendChild(card);
             });
