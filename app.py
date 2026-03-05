@@ -177,6 +177,24 @@ def get_stop_notifications(stop_id: str):
     return result
 
 def load_db_connection_config(path: str = DB_CONNECTION_PATH):
+    # Try environment variables first (DB_HOST, DB_PORT, etc.)
+    env_config = {}
+    env_mapping = {
+        "host": "DB_HOST",
+        "port": "DB_PORT",
+        "dbname": "DB_NAME",
+        "user": "DB_USER",
+        "password": "DB_PASSWORD",
+        "sslmode": "DB_SSLMODE",
+    }
+    for db_key, env_key in env_mapping.items():
+        value = os.getenv(env_key)
+        if value is not None:
+            env_config[db_key] = value
+    if REQUIRED_DB_SETTINGS.issubset(env_config.keys()):
+        return env_config
+
+    # Fall back to the connection file
     if not os.path.exists(path):
         return None
     config = {}
