@@ -151,6 +151,19 @@ let mapCityFailureCount = 0;
 let mapCityRequestChain = Promise.resolve();
 let isApplyingUrlState = false;
 
+/**
+ * Escape HTML special characters to prevent XSS when inserting text into innerHTML.
+ */
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 function parseFiltersSegment(segment) {
     if (!segment) return {};
     return segment.split(';').reduce((filters, entry) => {
@@ -1396,15 +1409,15 @@ function populateTable(data) {
                     : '';
 
                 const debugEditBtn = debugMode
-                    ? `<button class="debug-edit-btn" onclick="event.stopPropagation(); openDebugEdit('${d.stop_id}', '${d.line}', '${d.direction}', '${d.stable_scheduled_time}', ${d.minutes_remaining}, ${d.delay || 0})">✎</button>`
+                    ? `<button class="debug-edit-btn" data-stop-id="${escapeHtml(d.stop_id)}" data-line="${escapeHtml(d.line)}" data-direction="${escapeHtml(d.direction)}" data-scheduled-time="${escapeHtml(d.stable_scheduled_time)}" data-minutes="${parseInt(d.minutes_remaining) || 0}" data-delay="${parseInt(d.delay) || 0}">✎</button>`
                     : '';
 
                 card.innerHTML = `
                     <div class="line-info">
                         <div class="line-icon">${iconHtml}</div>
                         <div style="flex-grow: 1;">
-                            <div class="line-number" style="color: ${d.color};">${d.line}${wheelchairIcon}${debugEditBtn}</div>
-                            <div class="direction">${d.direction}</div>
+                            <div class="line-number" style="color: ${escapeHtml(d.color)};">${escapeHtml(d.line)}${wheelchairIcon}${debugEditBtn}</div>
+                            <div class="direction">${escapeHtml(d.direction)}</div>
                         </div>
                     </div>
                     <div class="time-section">
@@ -1415,6 +1428,22 @@ function populateTable(data) {
                         ${realtimeBadge}
                     </div>
                 `;
+
+                // Attach debug edit handler via addEventListener instead of inline onclick
+                const editBtn = card.querySelector('.debug-edit-btn');
+                if (editBtn) {
+                    editBtn.addEventListener('click', function(event) {
+                        event.stopPropagation();
+                        openDebugEdit(
+                            this.dataset.stopId,
+                            this.dataset.line,
+                            this.dataset.direction,
+                            this.dataset.scheduledTime,
+                            parseInt(this.dataset.minutes) || 0,
+                            parseInt(this.dataset.delay) || 0
+                        );
+                    });
+                }
 
                 platformColumn.appendChild(card);
             });
@@ -1545,8 +1574,8 @@ function showStationSelect(stations) {
         const option = document.createElement("div");
         option.className = "station-option";
         option.innerHTML = `
-            <strong>${station.name}</strong><br>
-            <small>ID: ${station.id}</small>
+            <strong>${escapeHtml(station.name)}</strong><br>
+            <small>ID: ${escapeHtml(station.id)}</small>
         `;
         option.onclick = () => {
             closeStationSelect();
@@ -2151,7 +2180,7 @@ function buildMapPopupDeparturesHtml(departures) {
             .slice(0, 4);
         const serviceTypes = new Set(platformDepartures.map(d => getServiceType(d.mot)));
         const iconsHtml = Array.from(serviceTypes).map(type => (
-            `<img src="/static/icons/${type}.png" class="platform-service-icon" title="${type}">`
+            `<img src="/static/icons/${escapeHtml(type)}.png" class="platform-service-icon" title="${escapeHtml(type)}">`
         )).join('');
 
         const rowsHtml = departuresForPlatform.map(d => {
@@ -2162,8 +2191,8 @@ function buildMapPopupDeparturesHtml(departures) {
                     <div class="line-info">
                         <div class="line-icon">${iconHtml}</div>
                         <div class="map-popup-line">
-                            <div class="line-number" style="color: ${d.color};">${d.line}</div>
-                            <div class="direction">${d.direction}</div>
+                            <div class="line-number" style="color: ${escapeHtml(d.color)};">${escapeHtml(d.line)}</div>
+                            <div class="direction">${escapeHtml(d.direction)}</div>
                         </div>
                     </div>
                     <div class="map-popup-time">${departureDisplay}</div>
@@ -2176,7 +2205,7 @@ function buildMapPopupDeparturesHtml(departures) {
                 <div class="map-popup-platform">
                     <div class="map-popup-platform-header">
                         <div class="map-popup-platform-title">
-                            <span class="platform-label">Platform ${platform}</span>
+                            <span class="platform-label">Platform ${escapeHtml(platform)}</span>
                             <div class="map-popup-platform-icons">${iconsHtml}</div>
                         </div>
                     </div>
@@ -2185,13 +2214,13 @@ function buildMapPopupDeparturesHtml(departures) {
             `;
         }
 
-        const platformKey = String(platform).replace(/"/g, '&quot;');
+        const platformKey = escapeHtml(String(platform));
         const isOpen = index === 0;
         return `
             <div class="map-popup-platform">
                 <button class="map-popup-platform-toggle" data-platform="${platformKey}" aria-expanded="${isOpen ? "true" : "false"}">
                     <div class="map-popup-platform-title">
-                        <span class="platform-label">Platform ${platform}</span>
+                        <span class="platform-label">Platform ${escapeHtml(platform)}</span>
                         <div class="map-popup-platform-icons">${iconsHtml}</div>
                     </div>
                     <span class="map-popup-toggle-icon">${isOpen ? "-" : "+"}</span>
@@ -2423,7 +2452,7 @@ async function updateOverpassMarkers() {
             const popupContent = document.createElement('div');
             popupContent.innerHTML = `
                 <div style="font-family: sans-serif; min-width: 150px;">
-                    <strong style="display: block; margin-bottom: 8px;">${name}</strong>
+                    <strong style="display: block; margin-bottom: 8px;">${escapeHtml(name)}</strong>
                     <button class="search-btn" style="padding: 6px 12px; font-size: 12px; width: 100%;">
                         View Departures
                     </button>
