@@ -46,7 +46,7 @@ def set_security_headers(response):
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://unpkg.com https://umami.fuadserver.uk; "
         "style-src 'self' 'unsafe-inline' https://unpkg.com; "
-        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.tile-cyclosm.openstreetmap.fr https://tiles.openrailwaymap.org; "
+        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.tile-cyclosm.openstreetmap.fr https://tiles.openrailwaymap.org https://tileserver.memomaps.de; "
         "connect-src 'self' https://overpass-api.de https://nominatim.openstreetmap.org https://umami.fuadserver.uk; "
         "font-src 'self'; "
         "frame-ancestors 'none';"
