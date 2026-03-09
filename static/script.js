@@ -1112,6 +1112,24 @@ function getPriorityEmoji(priority) {
     }
 }
 
+function sanitizeNotificationHtml(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const ALLOWED_TAGS = new Set(['B', 'I', 'STRONG', 'EM', 'BR']);
+    function clean(node) {
+        const children = Array.from(node.childNodes);
+        for (const child of children) {
+            if (child.nodeType === Node.TEXT_NODE) continue;
+            if (child.nodeType === Node.ELEMENT_NODE && ALLOWED_TAGS.has(child.tagName)) {
+                clean(child);
+            } else {
+                child.replaceWith(document.createTextNode(child.textContent));
+            }
+        }
+    }
+    clean(doc.body);
+    return doc.body.innerHTML;
+}
+
 async function fetchNotifications(stopIdParam) {
     if (!stopIdParam) {
         DevLog.notification('Skipped fetch - no stopId provided');
@@ -1172,7 +1190,10 @@ function displayNotifications(notifications) {
 function openNotificationDetail() {
     const popup = document.getElementById("notificationDetailPopup");
     const body = document.getElementById("notificationDetailBody");
-    if (!popup || !body || currentNotifications.length === 0) return;
+    if (!popup || !body || currentNotifications.length === 0) {
+        DevLog.notification('Detail popup not opened - no notifications stored');
+        return;
+    }
     
     body.innerHTML = '';
     
@@ -1192,7 +1213,7 @@ function openNotificationDetail() {
         if (n.content) {
             const content = document.createElement('div');
             content.className = 'notification-detail-content';
-            content.innerHTML = n.content;
+            content.innerHTML = sanitizeNotificationHtml(n.content);
             item.appendChild(content);
         }
         
