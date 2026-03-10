@@ -81,6 +81,7 @@ let isRefreshingMapMarkers = false;
 let mapOverpassRequestId = 0;
 const mapOverpassActiveRequests = new Set();
 const FAVORITES_KEY = 'transit_favorites';
+const FAVORITES_COLLAPSED_KEY = 'transit_favorites_collapsed';
 const HOME_STATION_KEY = 'transit_home_station';
 const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
@@ -92,6 +93,7 @@ const NOTIFICATION_SETTINGS_DEFAULTS = {
 let notificationSettings = { ...NOTIFICATION_SETTINGS_DEFAULTS };
 const APP_STORAGE_KEYS = [
     FAVORITES_KEY,
+    FAVORITES_COLLAPSED_KEY,
     HOME_STATION_KEY,
     EXPERIMENTAL_KEY,
     DEV_LOCATION_KEY,
@@ -148,6 +150,19 @@ let mapCityLastRequestAt = 0;
 let mapCityFailureCount = 0;
 let mapCityRequestChain = Promise.resolve();
 let isApplyingUrlState = false;
+
+/**
+ * Escape HTML special characters to prevent XSS when inserting text into innerHTML.
+ */
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
 function parseFiltersSegment(segment) {
     if (!segment) return {};
@@ -906,7 +921,7 @@ function updateNow() {
 
 async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
     if (updatesPaused && !ignorePaused) return;
-    document.getElementById("loading").style.display = "block";
+    showSkeletonLoading();
     closeError();
     
     if (searchTimeout) {
@@ -1011,7 +1026,7 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
     } catch (e) {
         console.error(e);
     } finally {
-        document.getElementById("loading").style.display = "none";
+        hideSkeletonLoading();
     }
 }
 
@@ -1019,7 +1034,7 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
 
 async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     if (updatesPaused && !ignorePaused) return;
-    document.getElementById("loading").style.display = "block";
+    showSkeletonLoading();
     closeError();
 
     if (searchTimeout) {
@@ -1078,11 +1093,42 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     } catch (e) {
         console.error(e);
     } finally {
-        document.getElementById("loading").style.display = "none";
+        hideSkeletonLoading();
     }
 }
 
 // ------------------ NOTIFICATION BAR ------------------
+
+let currentNotifications = [];
+
+function getPriorityEmoji(priority) {
+    switch ((priority || '').toLowerCase()) {
+        case 'verylow':  return 'ℹ️';
+        case 'low':      return '⚠️';
+        case 'normal':   return '⚠️';
+        case 'high':     return '🔴';
+        case 'veryhigh': return '🚨';
+        default:         return '⚠️';
+    }
+}
+
+function sanitizeNotificationHtml(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const ALLOWED_TAGS = new Set(['B', 'I', 'STRONG', 'EM', 'BR']);
+    function clean(node) {
+        const children = Array.from(node.childNodes);
+        for (const child of children) {
+            if (child.nodeType === Node.TEXT_NODE) continue;
+            if (child.nodeType === Node.ELEMENT_NODE && ALLOWED_TAGS.has(child.tagName)) {
+                clean(child);
+            } else {
+                child.replaceWith(document.createTextNode(child.textContent));
+            }
+        }
+    }
+    clean(doc.body);
+    return doc.body.innerHTML;
+}
 
 async function fetchNotifications(stopIdParam) {
     if (!stopIdParam) {
@@ -1124,17 +1170,79 @@ function displayNotifications(notifications) {
     
     if (!notificationBar || !notificationText || !notificationContent) return;
     
-    // Join all notifications with a separator
-    const text = notifications.join("  •  ");
+    // Store notifications for the detail popup
+    currentNotifications = notifications;
+    
+    // Build scrolling text from subtitle (object format) or plain string
+    const text = notifications.map(n => (typeof n === 'object' && n.subtitle) ? n.subtitle : String(n)).join("  •  ");
     notificationText.textContent = text;
     
     notificationBar.style.display = "block";
+    notificationBar.onclick = function(event) {
+        event.stopPropagation();
+        openNotificationDetail();
+    };
     
     // Adjust animation duration based on text length
     const textLength = text.length;
     applyNotificationSizing();
     const duration = updateNotificationScrollDuration(textLength);
     DevLog.notification('Displayed notifications', { count: notifications.length, textLength, animationDuration: duration ? `${duration}s` : null });
+}
+
+function openNotificationDetail() {
+    const popup = document.getElementById("notificationDetailPopup");
+    const body = document.getElementById("notificationDetailBody");
+    if (!popup || !body || currentNotifications.length === 0) {
+        DevLog.notification('Detail popup not opened - no notifications stored');
+        return;
+    }
+    
+    body.innerHTML = '';
+    
+    currentNotifications.forEach((n, i) => {
+        if (typeof n !== 'object') return;
+        
+        const item = document.createElement('div');
+        item.className = 'notification-detail-item';
+        
+        const emoji = getPriorityEmoji(n.priority);
+        
+        const title = document.createElement('div');
+        title.className = 'notification-detail-title';
+        title.textContent = `${emoji} ${n.subtitle || ''}`;
+        item.appendChild(title);
+        
+        if (n.content) {
+            const content = document.createElement('div');
+            content.className = 'notification-detail-content';
+            content.innerHTML = sanitizeNotificationHtml(n.content);
+            item.appendChild(content);
+        }
+        
+        if (n.providerCode) {
+            const provider = document.createElement('div');
+            provider.className = 'notification-detail-provider';
+            provider.textContent = n.providerCode;
+            item.appendChild(provider);
+        }
+        
+        body.appendChild(item);
+        
+        // Add separator between items
+        if (i < currentNotifications.length - 1) {
+            const sep = document.createElement('hr');
+            sep.className = 'notification-detail-separator';
+            body.appendChild(sep);
+        }
+    });
+    
+    popup.style.display = "block";
+}
+
+function closeNotificationDetail() {
+    const popup = document.getElementById("notificationDetailPopup");
+    if (popup) popup.style.display = "none";
 }
 
 function hideNotificationBar() {
@@ -1246,6 +1354,47 @@ function applyFilter() {
 
 // ------------------ TABLE ------------------
 
+function showSkeletonLoading() {
+    const grid = document.getElementById("skeletonGrid");
+    grid.innerHTML = "";
+    const platformCount = 3;
+    const cardsPerPlatform = 4;
+    for (let p = 0; p < platformCount; p++) {
+        const col = document.createElement("div");
+        col.className = "skeleton-platform-column";
+        let html = `
+            <div class="skeleton-platform-header">
+                <div class="skeleton-bone skeleton-platform-title"></div>
+                <div class="skeleton-bone skeleton-platform-icon"></div>
+            </div>
+        `;
+        for (let c = 0; c < cardsPerPlatform; c++) {
+            html += `
+                <div class="skeleton-card">
+                    <div class="skeleton-line-info">
+                        <div class="skeleton-bone skeleton-line-icon"></div>
+                        <div class="skeleton-line-content">
+                            <div class="skeleton-bone skeleton-line-number"></div>
+                            <div class="skeleton-bone skeleton-direction"></div>
+                        </div>
+                    </div>
+                    <div class="skeleton-time-section">
+                        <div class="skeleton-bone skeleton-departure-time"></div>
+                        <div class="skeleton-bone skeleton-realtime-badge"></div>
+                    </div>
+                </div>
+            `;
+        }
+        col.innerHTML = html;
+        grid.appendChild(col);
+    }
+    document.getElementById("loading").style.display = "block";
+}
+
+function hideSkeletonLoading() {
+    document.getElementById("loading").style.display = "none";
+}
+
 function populateTable(data) {
     const grid = document.getElementById("departuresGrid");
     grid.innerHTML = "";
@@ -1353,15 +1502,15 @@ function populateTable(data) {
                     : '';
 
                 const debugEditBtn = debugMode
-                    ? `<button class="debug-edit-btn" onclick="event.stopPropagation(); openDebugEdit('${d.stop_id}', '${d.line}', '${d.direction}', '${d.stable_scheduled_time}', ${d.minutes_remaining}, ${d.delay || 0})">✎</button>`
+                    ? `<button class="debug-edit-btn" data-stop-id="${escapeHtml(d.stop_id)}" data-line="${escapeHtml(d.line)}" data-direction="${escapeHtml(d.direction)}" data-scheduled-time="${escapeHtml(d.stable_scheduled_time)}" data-minutes="${parseInt(d.minutes_remaining) || 0}" data-delay="${parseInt(d.delay) || 0}">✎</button>`
                     : '';
 
                 card.innerHTML = `
                     <div class="line-info">
                         <div class="line-icon">${iconHtml}</div>
                         <div style="flex-grow: 1;">
-                            <div class="line-number" style="color: ${d.color};">${d.line}${wheelchairIcon}${debugEditBtn}</div>
-                            <div class="direction">${d.direction}</div>
+                            <div class="line-number" style="color: ${escapeHtml(d.color)};">${escapeHtml(d.line)}${wheelchairIcon}${debugEditBtn}</div>
+                            <div class="direction">${escapeHtml(d.direction)}</div>
                         </div>
                     </div>
                     <div class="time-section">
@@ -1372,6 +1521,22 @@ function populateTable(data) {
                         ${realtimeBadge}
                     </div>
                 `;
+
+                // Attach debug edit handler via addEventListener instead of inline onclick
+                const editBtn = card.querySelector('.debug-edit-btn');
+                if (editBtn) {
+                    editBtn.addEventListener('click', function(event) {
+                        event.stopPropagation();
+                        openDebugEdit(
+                            this.dataset.stopId,
+                            this.dataset.line,
+                            this.dataset.direction,
+                            this.dataset.scheduledTime,
+                            parseInt(this.dataset.minutes) || 0,
+                            parseInt(this.dataset.delay) || 0
+                        );
+                    });
+                }
 
                 platformColumn.appendChild(card);
             });
@@ -1455,6 +1620,13 @@ window.addEventListener("click", function(event) {
         notificationEditPopup.style.display = "none";
     }
 
+    const notificationDetailPopup = document.getElementById("notificationDetailPopup");
+    if (notificationDetailPopup &&
+        notificationDetailPopup.style.display === "block" &&
+        !notificationDetailPopup.querySelector(".modal-content").contains(event.target)) {
+        notificationDetailPopup.style.display = "none";
+    }
+
     if (stationPopup.style.display === "block" &&
         !stationPopup.querySelector(".modal-content").contains(event.target)) {
         stationPopup.style.display = "none";
@@ -1502,8 +1674,8 @@ function showStationSelect(stations) {
         const option = document.createElement("div");
         option.className = "station-option";
         option.innerHTML = `
-            <strong>${station.name}</strong><br>
-            <small>ID: ${station.id}</small>
+            <strong>${escapeHtml(station.name)}</strong><br>
+            <small>ID: ${escapeHtml(station.id)}</small>
         `;
         option.onclick = () => {
             closeStationSelect();
@@ -1564,8 +1736,8 @@ function saveFavorites(favorites) {
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
 }
 
-function isFavorite(id, name) {
-    return getFavorites().some(fav => fav.id === id && fav.name === name);
+function isFavorite(id) {
+    return getFavorites().some(fav => fav.id === id);
 }
 
 // Helper function to clean station name (display city info after comma)
@@ -1592,27 +1764,26 @@ function toggleFavorite() {
     }
 
     const favorites = getFavorites();
-    const cleanedName = cleanStationName(stopName);
-    const index = favorites.findIndex(fav => fav.id === stopId && fav.name === cleanedName);
+    const index = favorites.findIndex(fav => fav.id === stopId);
 
     if (index > -1) {
         // Remove from favorites
         favorites.splice(index, 1);
-        DevLog.storage('Removed from favorites', { id: stopId, name: cleanedName });
+        DevLog.storage('Removed from favorites', { id: stopId, name: stopName });
         // Track favorite removal
         if (typeof umami !== 'undefined') {
-            umami.track('favorite-remove', { station: cleanedName });
+            umami.track('favorite-remove', { station: stopName });
         }
     } else {
-        // Add to favorites with cleaned station name and ID from API
+        // Add to favorites with full station name and ID from API
         favorites.push({
             id: stopId,
-            name: cleanedName
+            name: stopName
         });
-        DevLog.storage('Added to favorites', { id: stopId, name: cleanedName });
+        DevLog.storage('Added to favorites', { id: stopId, name: stopName });
         // Track favorite addition
         if (typeof umami !== 'undefined') {
-            umami.track('favorite-add', { station: cleanedName });
+            umami.track('favorite-add', { station: stopName });
         }
     }
 
@@ -1623,8 +1794,7 @@ function toggleFavorite() {
 
 function updateFavoriteButton() {
     const btn = document.getElementById('favoriteBtn');
-    const cleanedName = cleanStationName(stopName);
-    const isFav = isFavorite(stopId, cleanedName);
+    const isFav = isFavorite(stopId);
 
     if (isFav) {
         btn.classList.add('favorite-active');
@@ -1635,18 +1805,60 @@ function updateFavoriteButton() {
     }
 }
 
+let favoritesEditMode = false;
+let favoritesCollapsed = localStorage.getItem(FAVORITES_COLLAPSED_KEY) === 'true';
+
+function toggleFavoritesEditMode() {
+    favoritesEditMode = !favoritesEditMode;
+    updateFavoritesDisplay();
+}
+
+function toggleFavoritesCollapsed() {
+    favoritesCollapsed = !favoritesCollapsed;
+    localStorage.setItem(FAVORITES_COLLAPSED_KEY, favoritesCollapsed);
+    if (favoritesCollapsed) {
+        favoritesEditMode = false;
+    }
+    updateFavoritesDisplay();
+}
+
 function updateFavoritesDisplay() {
     const favorites = getFavorites();
     const section = document.getElementById('favoritesSection');
     const grid = document.getElementById('favoritesGrid');
+    const chevron = document.getElementById('favoritesChevron');
+    const menuBtn = document.getElementById('favoritesMenuBtn');
 
     if (favorites.length === 0) {
+        favoritesEditMode = false;
         section.style.display = 'none';
         return;
     }
 
     section.style.display = 'block';
+
+    // Update collapse state
+    const header = section.querySelector('.favorites-header');
+    if (chevron) {
+        chevron.classList.toggle('collapsed', favoritesCollapsed);
+    }
+    if (header) {
+        header.classList.toggle('collapsed', favoritesCollapsed);
+    }
+    if (favoritesCollapsed) {
+        grid.style.display = 'none';
+        if (menuBtn) menuBtn.style.display = 'none';
+        return;
+    }
+
+    grid.style.display = '';
+    if (menuBtn) menuBtn.style.display = '';
     grid.innerHTML = '';
+
+    // Update the three-dot menu button state
+    if (menuBtn) {
+        menuBtn.classList.toggle('active', favoritesEditMode);
+    }
 
     favorites.forEach((fav, index) => {
         const btnWrapper = document.createElement('div');
@@ -1656,7 +1868,14 @@ function updateFavoritesDisplay() {
         btn.className = 'favorite-quick-btn';
         btn.innerText = fav.name;
         btn.title = fav.name;
+
+        if (favoritesEditMode) {
+            btn.classList.add('favorite-edit-mode');
+            btn.style.paddingRight = '35px';
+        }
+
         btn.onclick = () => {
+            if (favoritesEditMode) return;
             // Track favorite quick button click
             if (typeof umami !== 'undefined') {
                 umami.track('favorite-quick-button', { station: fav.name });
@@ -1664,17 +1883,20 @@ function updateFavoritesDisplay() {
             quickSearchById(fav.id, fav.name);
         };
 
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'remove-favorite-x';
-        removeBtn.innerHTML = '×';
-        removeBtn.title = 'Remove from favorites';
-        removeBtn.onclick = (e) => {
-            e.stopPropagation();
-            removeFavorite(index);
-        };
-
         btnWrapper.appendChild(btn);
-        btnWrapper.appendChild(removeBtn);
+
+        if (favoritesEditMode) {
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-favorite-x';
+            removeBtn.innerHTML = '×';
+            removeBtn.title = 'Remove from favorites';
+            removeBtn.onclick = (e) => {
+                e.stopPropagation();
+                removeFavorite(index);
+            };
+            btnWrapper.appendChild(removeBtn);
+        }
+
         grid.appendChild(btnWrapper);
     });
 }
@@ -1793,7 +2015,7 @@ function initMap() {
 
     // ÖPNV Karte (Transit Layer)
     // This layer highlights tram tracks and bus lines
-    L.tileLayer('https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png', {
+    L.tileLayer('https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png', {
         maxZoom: 18,
         attribution: 'Map <a href="https://memomaps.de/">memomaps.de</a> <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
@@ -2058,7 +2280,7 @@ function buildMapPopupDeparturesHtml(departures) {
             .slice(0, 4);
         const serviceTypes = new Set(platformDepartures.map(d => getServiceType(d.mot)));
         const iconsHtml = Array.from(serviceTypes).map(type => (
-            `<img src="/static/icons/${type}.png" class="platform-service-icon" title="${type}">`
+            `<img src="/static/icons/${escapeHtml(type)}.png" class="platform-service-icon" title="${escapeHtml(type)}">`
         )).join('');
 
         const rowsHtml = departuresForPlatform.map(d => {
@@ -2069,8 +2291,8 @@ function buildMapPopupDeparturesHtml(departures) {
                     <div class="line-info">
                         <div class="line-icon">${iconHtml}</div>
                         <div class="map-popup-line">
-                            <div class="line-number" style="color: ${d.color};">${d.line}</div>
-                            <div class="direction">${d.direction}</div>
+                            <div class="line-number" style="color: ${escapeHtml(d.color)};">${escapeHtml(d.line)}</div>
+                            <div class="direction">${escapeHtml(d.direction)}</div>
                         </div>
                     </div>
                     <div class="map-popup-time">${departureDisplay}</div>
@@ -2083,7 +2305,7 @@ function buildMapPopupDeparturesHtml(departures) {
                 <div class="map-popup-platform">
                     <div class="map-popup-platform-header">
                         <div class="map-popup-platform-title">
-                            <span class="platform-label">Platform ${platform}</span>
+                            <span class="platform-label">Platform ${escapeHtml(platform)}</span>
                             <div class="map-popup-platform-icons">${iconsHtml}</div>
                         </div>
                     </div>
@@ -2092,13 +2314,13 @@ function buildMapPopupDeparturesHtml(departures) {
             `;
         }
 
-        const platformKey = String(platform).replace(/"/g, '&quot;');
+        const platformKey = escapeHtml(String(platform));
         const isOpen = index === 0;
         return `
             <div class="map-popup-platform">
                 <button class="map-popup-platform-toggle" data-platform="${platformKey}" aria-expanded="${isOpen ? "true" : "false"}">
                     <div class="map-popup-platform-title">
-                        <span class="platform-label">Platform ${platform}</span>
+                        <span class="platform-label">Platform ${escapeHtml(platform)}</span>
                         <div class="map-popup-platform-icons">${iconsHtml}</div>
                     </div>
                     <span class="map-popup-toggle-icon">${isOpen ? "-" : "+"}</span>
@@ -2330,7 +2552,7 @@ async function updateOverpassMarkers() {
             const popupContent = document.createElement('div');
             popupContent.innerHTML = `
                 <div style="font-family: sans-serif; min-width: 150px;">
-                    <strong style="display: block; margin-bottom: 8px;">${name}</strong>
+                    <strong style="display: block; margin-bottom: 8px;">${escapeHtml(name)}</strong>
                     <button class="search-btn" style="padding: 6px 12px; font-size: 12px; width: 100%;">
                         View Departures
                     </button>

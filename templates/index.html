@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>{{ app_name }} Live Departures</title>
     <link rel="icon" href="/static/icons/missing.png" type="image/png">
     <link rel="stylesheet" href="/static/style.css">
@@ -95,17 +95,6 @@
                             <path d="m21 21-4.35-4.35"></path>
                         </svg>
                     </button>
-                </div>
-                <div class="search-container city-search-container">
-                    <div class="search-input-wrapper">
-                        <input
-                            type="text"
-                            id="cityInput"
-                            class="search-input city-input"
-                            placeholder="City (default: Karlsruhe)"
-                            autocomplete="off"
-                        >
-                    </div>
                     <button class="favorite-btn" id="favoriteBtn" onclick="toggleFavorite()" title="Add to favorites">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
@@ -129,7 +118,19 @@
                 <!-- Favorites Section -->
                 <div class="favorites-section" id="favoritesSection" style="display: none;">
                     <div class="favorites-header">
-                        <h3>Favorites</h3>
+                        <div class="favorites-collapse-toggle" onclick="toggleFavoritesCollapsed()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleFavoritesCollapsed()}" role="button" tabindex="0" title="Collapse/expand favorites">
+                            <svg class="favorites-chevron" id="favoritesChevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                            <h3>Favorites</h3>
+                        </div>
+                        <button class="favorites-menu-btn" id="favoritesMenuBtn" onclick="toggleFavoritesEditMode()" title="Edit favorites">
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                                <circle cx="12" cy="5" r="2"></circle>
+                                <circle cx="12" cy="12" r="2"></circle>
+                                <circle cx="12" cy="19" r="2"></circle>
+                            </svg>
+                        </button>
                     </div>
                     <div class="favorites-grid" id="favoritesGrid"></div>
                 </div>
@@ -187,10 +188,9 @@
                 </div>
             </div>
 
-            <!-- Loading Indicator -->
-            <div id="loading" class="loading-container">
-                <div class="spinner"></div>
-                <p>Loading departures...</p>
+            <!-- Skeleton Loading Indicator -->
+            <div id="loading" class="departures-section" style="display: none;">
+                <div class="departures-grid" id="skeletonGrid"></div>
             </div>
 
             <!-- Error Message Box -->
@@ -290,6 +290,15 @@
     </div>
 </div>
 {% endif %}
+
+<!-- Notification Detail Popup -->
+<div id="notificationDetailPopup" class="modal">
+    <div class="modal-content notification-detail-modal">
+        <div class="notification-detail-topbar"></div>
+        <button class="modal-close" onclick="closeNotificationDetail()">×</button>
+        <div id="notificationDetailBody" class="notification-detail-body"></div>
+    </div>
+</div>
 
 <!-- Dev Location Popup -->
 <div id="devLocationPopup" class="modal">
