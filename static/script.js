@@ -1099,6 +1099,37 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
 
 // ------------------ NOTIFICATION BAR ------------------
 
+let currentNotifications = [];
+
+function getPriorityEmoji(priority) {
+    switch ((priority || '').toLowerCase()) {
+        case 'verylow':  return 'ℹ️';
+        case 'low':      return '⚠️';
+        case 'normal':   return '⚠️';
+        case 'high':     return '🔴';
+        case 'veryhigh': return '🚨';
+        default:         return '⚠️';
+    }
+}
+
+function sanitizeNotificationHtml(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const ALLOWED_TAGS = new Set(['B', 'I', 'STRONG', 'EM', 'BR']);
+    function clean(node) {
+        const children = Array.from(node.childNodes);
+        for (const child of children) {
+            if (child.nodeType === Node.TEXT_NODE) continue;
+            if (child.nodeType === Node.ELEMENT_NODE && ALLOWED_TAGS.has(child.tagName)) {
+                clean(child);
+            } else {
+                child.replaceWith(document.createTextNode(child.textContent));
+            }
+        }
+    }
+    clean(doc.body);
+    return doc.body.innerHTML;
+}
+
 async function fetchNotifications(stopIdParam) {
     if (!stopIdParam) {
         DevLog.notification('Skipped fetch - no stopId provided');
@@ -1139,17 +1170,76 @@ function displayNotifications(notifications) {
     
     if (!notificationBar || !notificationText || !notificationContent) return;
     
-    // Join all notifications with a separator
-    const text = notifications.join("  •  ");
+    // Store notifications for the detail popup
+    currentNotifications = notifications;
+    
+    // Build scrolling text from subtitle (object format) or plain string
+    const text = notifications.map(n => (typeof n === 'object' && n.subtitle) ? n.subtitle : String(n)).join("  •  ");
     notificationText.textContent = text;
     
     notificationBar.style.display = "block";
+    notificationBar.onclick = openNotificationDetail;
     
     // Adjust animation duration based on text length
     const textLength = text.length;
     applyNotificationSizing();
     const duration = updateNotificationScrollDuration(textLength);
     DevLog.notification('Displayed notifications', { count: notifications.length, textLength, animationDuration: duration ? `${duration}s` : null });
+}
+
+function openNotificationDetail() {
+    const popup = document.getElementById("notificationDetailPopup");
+    const body = document.getElementById("notificationDetailBody");
+    if (!popup || !body || currentNotifications.length === 0) {
+        DevLog.notification('Detail popup not opened - no notifications stored');
+        return;
+    }
+    
+    body.innerHTML = '';
+    
+    currentNotifications.forEach((n, i) => {
+        if (typeof n !== 'object') return;
+        
+        const item = document.createElement('div');
+        item.className = 'notification-detail-item';
+        
+        const emoji = getPriorityEmoji(n.priority);
+        
+        const title = document.createElement('div');
+        title.className = 'notification-detail-title';
+        title.textContent = `${emoji} ${n.subtitle || ''}`;
+        item.appendChild(title);
+        
+        if (n.content) {
+            const content = document.createElement('div');
+            content.className = 'notification-detail-content';
+            content.innerHTML = sanitizeNotificationHtml(n.content);
+            item.appendChild(content);
+        }
+        
+        if (n.providerCode) {
+            const provider = document.createElement('div');
+            provider.className = 'notification-detail-provider';
+            provider.textContent = n.providerCode;
+            item.appendChild(provider);
+        }
+        
+        body.appendChild(item);
+        
+        // Add separator between items
+        if (i < currentNotifications.length - 1) {
+            const sep = document.createElement('hr');
+            sep.className = 'notification-detail-separator';
+            body.appendChild(sep);
+        }
+    });
+    
+    popup.style.display = "block";
+}
+
+function closeNotificationDetail() {
+    const popup = document.getElementById("notificationDetailPopup");
+    if (popup) popup.style.display = "none";
 }
 
 function hideNotificationBar() {
@@ -1525,6 +1615,13 @@ window.addEventListener("click", function(event) {
         notificationEditPopup.style.display === "block" &&
         !notificationEditPopup.querySelector(".modal-content").contains(event.target)) {
         notificationEditPopup.style.display = "none";
+    }
+
+    const notificationDetailPopup = document.getElementById("notificationDetailPopup");
+    if (notificationDetailPopup &&
+        notificationDetailPopup.style.display === "block" &&
+        !notificationDetailPopup.querySelector(".modal-content").contains(event.target)) {
+        notificationDetailPopup.style.display = "none";
     }
 
     if (stationPopup.style.display === "block" &&
