@@ -259,6 +259,7 @@ body.dark-mode .moon-icon {
     overflow: hidden;
     position: relative;
     z-index: 99;
+    cursor: pointer;
     --notification-padding-scale: 1;
 }
 
@@ -312,32 +313,29 @@ body.dark-mode .notification-bar {
     color: #1a1a1a;
 }
 
-.notification-bar {
-    cursor: pointer;
-}
-
 /* ==================== NOTIFICATION DETAIL MODAL ==================== */
 
 .notification-detail-modal {
     padding: 0;
     overflow: hidden;
     max-width: 500px;
-    margin: auto;
     position: absolute;
     top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    transform: translateY(-50%);
     animation: notifDetailIn 0.3s;
 }
 
 @keyframes notifDetailIn {
     from {
         opacity: 0;
-        transform: translate(-50%, -45%);
+        transform: translateY(-45%);
     }
     to {
         opacity: 1;
-        transform: translate(-50%, -50%);
+        transform: translateY(-50%);
     }
 }
 
@@ -1789,8 +1787,8 @@ tr:hover {
         padding: 20px;
     }
 
-    .departure-time {
-        font-size: 20px;
+    .notification-detail-modal {
+        margin: 0 auto;
     }
 
     .favorites-grid {
@@ -1899,6 +1897,14 @@ tr:hover {
     .modal-content {
         margin: 20px auto;
         padding: 16px;
+    }
+
+    .notification-detail-modal {
+        margin: 0 auto;
+    }
+
+    .notification-detail-body {
+        padding: 20px 20px 16px;
     }
 
     .modal-title {
