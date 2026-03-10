@@ -526,6 +526,8 @@ def search_by_id():
     except Exception as e:
         logging.exception("Unexpected error in /search_by_id")
         return jsonify({"error": "An internal error has occurred"}), 500
+
+@app.route("/lookup_stop_by_coords")
 def lookup_stop_by_coords():
     lat = request.args.get("lat")
     lon = request.args.get("lon")

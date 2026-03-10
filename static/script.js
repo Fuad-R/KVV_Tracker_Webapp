@@ -1178,7 +1178,10 @@ function displayNotifications(notifications) {
     notificationText.textContent = text;
     
     notificationBar.style.display = "block";
-    notificationBar.onclick = openNotificationDetail;
+    notificationBar.onclick = function(event) {
+        event.stopPropagation();
+        openNotificationDetail();
+    };
     
     // Adjust animation duration based on text length
     const textLength = text.length;
