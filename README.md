@@ -88,6 +88,7 @@ To enable dev mode automatically (including Flask debug and UI debug tools), set
 - `app.py`: Main Flask application backend.
 - `templates/`: HTML templates.
 - `static/`: Static assets (CSS, JS, icons, manifest, service worker).
+- `docs/goals-and-roadmap.md`: Product goals document with architecture, milestones, and future GitHub issue roadmap.
 - `Dockerfile`: Configuration for Docker deployment.
 - `requirements.txt`: Python dependencies.
 
