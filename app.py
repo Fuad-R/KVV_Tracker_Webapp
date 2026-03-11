@@ -18,6 +18,14 @@ MAP_STOP_SEARCH_RADIUS_METERS = 500
 DB_CONNECTION_PATH = "/config/db_connection.txt"
 REQUIRED_DB_SETTINGS = {"host", "port", "dbname", "user", "password"}
 
+# API key required for every endpoint (set via API_KEY environment variable).
+API_KEY = os.getenv("API_KEY", "")
+if not API_KEY:
+    logging.warning(
+        "API_KEY environment variable is not set. "
+        "All endpoints will reject requests until an API key is configured."
+    )
+
 # Debug password must be set via environment variable (DEBUG_PASSWORD).
 # enter debug mode by typing test-dev-debug in station search
 DEBUG_PASSWORD = os.getenv("DEBUG_PASSWORD", "")
@@ -54,6 +62,15 @@ def set_security_headers(response):
     if not DEV_MODE:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
+
+# ---------------- API KEY VALIDATION ----------------
+@app.before_request
+def require_api_key():
+    """Reject every request that does not carry a valid X-API-Key header."""
+    key = request.headers.get("X-API-Key", "")
+    if not API_KEY or not secrets.compare_digest(key, API_KEY):
+        return jsonify({"error": "Unauthorized – invalid or missing API key"}), 401
 
 
 # ---------------- DEV MODE LOGGING ----------------
@@ -287,6 +304,7 @@ def index(path):
         "index.html",
         app_name=TRANSIT_APP,
         dev_mode=DEV_MODE,
+        api_key=API_KEY,
     )
 
 

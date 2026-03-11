@@ -334,6 +334,13 @@ function withDebugAuthHeaders(headers = {}) {
     if (authHeader) {
         headers["X-Debug-Password"] = authHeader;
     }
+    return withApiKey(headers);
+}
+
+function withApiKey(headers = {}) {
+    if (window.APP_CONFIG && window.APP_CONFIG.apiKey) {
+        headers["X-API-Key"] = window.APP_CONFIG.apiKey;
+    }
     return headers;
 }
 
@@ -364,7 +371,7 @@ async function loginDebug() {
         DevLog.api('/debug/login', 'POST');
         const res = await fetch("/debug/login", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: withApiKey({ "Content-Type": "application/json" }),
             body: JSON.stringify({ password })
         });
         const data = await res.json();
@@ -453,9 +460,9 @@ async function clearDebugOverrides() {
         DevLog.api('/debug/clear', 'POST');
         const res = await fetch("/debug/clear", {
             method: "POST",
-            headers: {
+            headers: withApiKey({
                 "X-Debug-Password": authHeader
-            }
+            })
         });
         const data = await res.json();
         DevLog.apiResponse('/debug/clear', res.status, data);
@@ -945,7 +952,9 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         }
 
         DevLog.api('/search', 'GET', { stop: lookupName });
-        const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`);
+        const res = await fetch(`/search?stop=${encodeURIComponent(lookupName)}`, {
+            headers: withApiKey()
+        });
         const result = await res.json();
         DevLog.apiResponse('/search', res.status, { departures: result.departures?.length || 0, station: result.station_name });
 
@@ -1052,7 +1061,9 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
 
     try {
         DevLog.api('/search_by_id', 'GET', { stop_id: stopId, station_name: stopName });
-        const res = await fetch(`/search_by_id?stop_id=${stopId}&station_name=${encodeURIComponent(stopName)}`);
+        const res = await fetch(`/search_by_id?stop_id=${stopId}&station_name=${encodeURIComponent(stopName)}`, {
+            headers: withApiKey()
+        });
         const result = await res.json();
         DevLog.apiResponse('/search_by_id', res.status, { departures: result.departures?.length || 0, station: result.station_name });
 
@@ -2219,7 +2230,8 @@ async function lookupStopByCoords(lat, lon) {
     try {
         DevLog.api('/lookup_stop_by_coords', 'GET', { lat, lon });
         const res = await fetch(`/lookup_stop_by_coords?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`, {
-            signal: controller.signal
+            signal: controller.signal,
+            headers: withApiKey()
         });
         const result = await res.json();
         DevLog.apiResponse('/lookup_stop_by_coords', res.status, result);
@@ -2406,7 +2418,9 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
                 throw new Error("No stop found at this location.");
             }
             const nearestStationName = lookupResult.stop_name || stationName || lookupName || String(nearestStopId);
-            const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`);
+            const byIdResponse = await fetch(`/search_by_id?stop_id=${encodeURIComponent(nearestStopId)}&station_name=${encodeURIComponent(nearestStationName)}`, {
+                headers: withApiKey()
+            });
             const byIdResult = await byIdResponse.json();
             if (!byIdResponse.ok || byIdResult.error) {
                 throw new Error(byIdResult.error || `Failed to load departures for stop ${nearestStopId}.`);
@@ -2417,7 +2431,9 @@ async function loadMapPopupDepartures(stationName, popupContent, markerCoords = 
             if (!fallbackName) {
                 throw new Error("Cannot load departures: stop name is required.");
             }
-            const res = await fetch(`/search?stop=${encodeURIComponent(fallbackName)}`);
+            const res = await fetch(`/search?stop=${encodeURIComponent(fallbackName)}`, {
+                headers: withApiKey()
+            });
             const result = await res.json();
             if (!res.ok || result.error) {
                 throw new Error(result.error || "Failed to load departures.");

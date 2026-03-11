@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Environment variables for security configuration (set at runtime):
+#   API_KEY          – required API key for all endpoints (checked via X-API-Key header)
 #   DEBUG_PASSWORD   – password for debug endpoints (required for debug access)
 #   FLASK_SECRET_KEY – secret key for Flask sessions (auto-generated if not set)
 
