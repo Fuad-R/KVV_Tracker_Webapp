@@ -12,6 +12,7 @@ TRANSIT_APP = "Transit App"
 
 DEV_MODE = (os.getenv("dev") or os.getenv("DEV") or "false").strip().lower() == "true"
 BASE_URL = "https://transitapi-dev.fuadserver.uk/api" if DEV_MODE else "https://transitapi.fuadserver.uk/api"
+API_KEY = os.getenv("API_KEY", "")
 MAX_MINUTES = 30
 # Map stop lookup radius (500m) to match map selection requirements.
 MAP_STOP_SEARCH_RADIUS_METERS = 500
@@ -109,9 +110,19 @@ def extract_station_name_from_departures(departures):
                     return value
     return None
 
+def get_api_request_headers():
+    if not API_KEY:
+        return {}
+    return {"X-API-Key": API_KEY}
+
 def get_stop_id(stop_name: str):
     dev_log("API", f"GET {BASE_URL}/stops/search", {"q": stop_name})
-    r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name}, timeout=10)
+    r = requests.get(
+        f"{BASE_URL}/stops/search",
+        params={"q": stop_name},
+        headers=get_api_request_headers(),
+        timeout=10,
+    )
     dev_log("API-RESPONSE", f"stops/search returned {r.status_code}", {"results": len(extract_search_locations(r.json())) if r.ok else 0})
     r.raise_for_status()
     stops = extract_search_locations(r.json())
@@ -124,7 +135,12 @@ def get_stop_name_by_id(stop_id: str):
         return None
     try:
         dev_log("API", f"GET {BASE_URL}/stops/search (by ID)", {"q": stop_id})
-        r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_id}, timeout=10)
+        r = requests.get(
+            f"{BASE_URL}/stops/search",
+            params={"q": stop_id},
+            headers=get_api_request_headers(),
+            timeout=10,
+        )
         dev_log("API-RESPONSE", f"stops/search returned {r.status_code}")
         r.raise_for_status()
         stops = extract_search_locations(r.json())
@@ -162,7 +178,12 @@ def get_stop_name_by_id(stop_id: str):
 
 def get_stop_departures(stop_id: str):
     dev_log("API", f"GET {BASE_URL}/stops/{stop_id}", {"detailed": "1", "delay": "1"})
-    r = requests.get(f"{BASE_URL}/stops/{stop_id}", params={"detailed": "1", "delay": "1"}, timeout=10)
+    r = requests.get(
+        f"{BASE_URL}/stops/{stop_id}",
+        params={"detailed": "1", "delay": "1"},
+        headers=get_api_request_headers(),
+        timeout=10,
+    )
     result = r.json()
     dev_log("API-RESPONSE", f"stops/{stop_id} returned {r.status_code}", {"departures": len(result) if isinstance(result, list) else 0})
     r.raise_for_status()
@@ -170,7 +191,12 @@ def get_stop_departures(stop_id: str):
 
 def get_stop_notifications(stop_id: str):
     dev_log("API", f"GET {BASE_URL}/current_notifs", {"stopID": stop_id})
-    r = requests.get(f"{BASE_URL}/current_notifs", params={"stopID": stop_id}, timeout=10)
+    r = requests.get(
+        f"{BASE_URL}/current_notifs",
+        params={"stopID": stop_id},
+        headers=get_api_request_headers(),
+        timeout=10,
+    )
     result = r.json()
     dev_log("API-RESPONSE", f"current_notifs returned {r.status_code}", {"notifications": len(result) if isinstance(result, list) else 0})
     r.raise_for_status()
@@ -320,7 +346,12 @@ def search():
             stop_name_api = current_query.replace(" ", "_")
             # Pull all matching stops from the API
             dev_log("API", f"GET {BASE_URL}/stops/search", {"q": stop_name_api})
-            r = requests.get(f"{BASE_URL}/stops/search", params={"q": stop_name_api}, timeout=10)
+            r = requests.get(
+                f"{BASE_URL}/stops/search",
+                params={"q": stop_name_api},
+                headers=get_api_request_headers(),
+                timeout=10,
+            )
             r.raise_for_status()
             stops = extract_search_locations(r.json())
             dev_log("API-RESPONSE", f"stops/search returned {r.status_code}", {"results": len(stops)})
