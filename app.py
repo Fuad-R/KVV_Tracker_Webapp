@@ -1,9 +1,7 @@
 from flask import Flask, render_template, jsonify, request
-from contextlib import closing
 import os
 import re
 import secrets
-import psycopg2
 import requests
 from datetime import datetime, timedelta
 import logging
@@ -14,10 +12,9 @@ DEV_MODE = (os.getenv("dev") or os.getenv("DEV") or "false").strip().lower() == 
 BASE_URL = "https://transitapi-dev.fuadserver.uk/api" if DEV_MODE else "https://transitapi.fuadserver.uk/api"
 API_KEY = os.getenv("API_KEY", "")
 MAX_MINUTES = 30
-# Map stop lookup radius (500m) to match map selection requirements.
-MAP_STOP_SEARCH_RADIUS_METERS = 500
-DB_CONNECTION_PATH = "/config/db_connection.txt"
-REQUIRED_DB_SETTINGS = {"host", "port", "dbname", "user", "password"}
+# Map stop lookup: use API nearby endpoint with strict radius/limit.
+MAP_STOP_SEARCH_RADIUS_METERS = 200
+MAP_STOP_SEARCH_LIMIT = 5
 
 # Debug password must be set via environment variable (DEBUG_PASSWORD).
 # enter debug mode by typing test-dev-debug in station search
@@ -160,20 +157,6 @@ def get_stop_name_by_id(stop_id: str):
             return fallback_name
     except requests.RequestException as e:
         dev_log("API-ERROR", f"Failed to get stop name by ID", {"stop_id": stop_id, "error": str(e)})
-        pass
-
-    try:
-        dev_log("DB", "Querying stops table for stop_name", {"stop_id": stop_id})
-        with closing(get_db_connection()) as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT stop_name FROM stops WHERE stop_id = %s LIMIT 1;", (stop_id,))
-                row = cur.fetchone()
-                if row and row[0]:
-                    dev_log("DB-RESPONSE", "Found stop name in database", {"stop_name": row[0]})
-                    return row[0]
-    except (FileNotFoundError, ValueError, psycopg2.Error) as e:
-        dev_log("DB-ERROR", "Failed to query database", {"error": str(e)})
-        return None
     return None
 
 def get_stop_departures(stop_id: str):
@@ -202,63 +185,38 @@ def get_stop_notifications(stop_id: str):
     r.raise_for_status()
     return result
 
-def load_db_connection_config(path: str = DB_CONNECTION_PATH):
-    # Try environment variables first (DB_HOST, DB_PORT, etc.)
-    env_config = {}
-    env_mapping = {
-        "host": "DB_HOST",
-        "port": "DB_PORT",
-        "dbname": "DB_NAME",
-        "user": "DB_USER",
-        "password": "DB_PASSWORD",
-        "sslmode": "DB_SSLMODE",
-    }
-    for db_key, env_key in env_mapping.items():
-        value = os.getenv(env_key)
-        if value is not None:
-            env_config[db_key] = value
-    if REQUIRED_DB_SETTINGS.issubset(env_config.keys()):
-        return env_config
-
-    # Fall back to the connection file
-    if not os.path.exists(path):
+def find_nearest_stop(lat: float, lon: float, max_distance_meters: int = MAP_STOP_SEARCH_RADIUS_METERS, limit: int = MAP_STOP_SEARCH_LIMIT):
+    dev_log(
+        "API",
+        f"GET {BASE_URL}/stops/nearby",
+        {"lat": lat, "long": lon, "distance": max_distance_meters, "limit": limit},
+    )
+    r = requests.get(
+        f"{BASE_URL}/stops/nearby",
+        params={"lat": lat, "long": lon, "distance": max_distance_meters, "limit": limit},
+        headers=get_api_request_headers(),
+        timeout=10,
+    )
+    r.raise_for_status()
+    payload = r.json()
+    if isinstance(payload, list):
+        stops = payload
+    elif isinstance(payload, dict):
+        stops = payload.get("stops", [])
+    else:
+        stops = []
+    dev_log("API-RESPONSE", f"stops/nearby returned {r.status_code}", {"results": len(stops) if isinstance(stops, list) else 0})
+    if not isinstance(stops, list) or not stops:
         return None
-    config = {}
-    with open(path, "r", encoding="utf-8") as config_file:
-        for line in config_file:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") or "=" not in stripped:
-                continue
-            key, value = stripped.split("=", 1)
-            config[key.strip()] = value.strip()
-    return config
-
-def get_db_connection():
-    config = load_db_connection_config()
-    if not config:
-        raise FileNotFoundError(f"Database connection file not found at {DB_CONNECTION_PATH}")
-    missing_keys = REQUIRED_DB_SETTINGS - set(config.keys())
-    if missing_keys:
-        missing_list = ", ".join(sorted(missing_keys))
-        raise ValueError(f"Database connection file missing required settings: {missing_list}")
-    return psycopg2.connect(**config)
-
-def find_nearest_stop(lat: float, lon: float, max_distance_meters: int = MAP_STOP_SEARCH_RADIUS_METERS):
-    query = """
-        SELECT stop_id, stop_name, ST_Distance(location, ref_point) AS distance
-        FROM stops,
-             (SELECT ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326)::geography AS ref_point) AS reference
-        WHERE location IS NOT NULL AND ST_DWithin(location, ref_point, %(max_distance)s)
-        ORDER BY distance ASC
-        LIMIT 1;
-    """
-    with closing(get_db_connection()) as conn:
-        with conn.cursor() as cur:
-            cur.execute(query, {"lat": lat, "lon": lon, "max_distance": max_distance_meters})
-            row = cur.fetchone()
-            if not row:
-                return None
-            return {"stop_id": row[0], "stop_name": row[1], "distance_meters": float(row[2])}
+    first_stop = stops[0] if isinstance(stops[0], dict) else {}
+    stop_id = first_stop.get("stop_id") or first_stop.get("id") or first_stop.get("stopId")
+    if not stop_id:
+        return None
+    return {
+        "stop_id": stop_id,
+        "stop_name": first_stop.get("stop_name") or first_stop.get("name"),
+        "distance_meters": first_stop.get("distance_meters"),
+    }
 
 
 # ---------------- LINE COLORS ----------------
@@ -577,23 +535,23 @@ def lookup_stop_by_coords():
         return jsonify({"error": "Coordinates out of range"}), 400
 
     try:
-        dev_log("DB", "Finding nearest stop", {"lat": lat, "lon": lon, "radius": MAP_STOP_SEARCH_RADIUS_METERS})
+        dev_log("API", "Finding nearest stop", {"lat": lat, "lon": lon, "radius": MAP_STOP_SEARCH_RADIUS_METERS, "limit": MAP_STOP_SEARCH_LIMIT})
         stop = find_nearest_stop(lat, lon)
         if not stop:
-            dev_log("DB-RESPONSE", "No nearby stop found")
+            dev_log("API-RESPONSE", "No nearby stop found")
             return jsonify({"error": "No nearby stop found"}), 404
-        dev_log("DB-RESPONSE", "Found nearest stop", stop)
+        dev_log("API-RESPONSE", "Found nearest stop", stop)
         return jsonify({
             "stop_id": stop["stop_id"],
             "stop_name": stop["stop_name"],
             "distance_meters": stop["distance_meters"]
         })
-    except (FileNotFoundError, ValueError) as e:
-        dev_log("DB-ERROR", "Error finding nearest stop (file/value error)", {"error": str(e)})
-        logging.exception("Error finding nearest stop (file/value error)")
+    except requests.RequestException as e:
+        dev_log("API-ERROR", "Error finding nearest stop (API request error)", {"error": str(e)})
+        logging.exception("Error finding nearest stop (API request error)")
         return jsonify({"error": "Service temporarily unavailable"}), 503
     except Exception as e:
-        dev_log("DB-ERROR", "Unexpected error in lookup_stop_by_coords", {"error": str(e)})
+        dev_log("API-ERROR", "Unexpected error in lookup_stop_by_coords", {"error": str(e)})
         logging.exception("Unexpected error in lookup_stop_by_coords")
         return jsonify({"error": "An internal error has occurred"}), 500
 
