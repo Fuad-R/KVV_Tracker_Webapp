@@ -1,6 +1,6 @@
 # Transit Tracker Webapp
 
-A Flask-based web application to track real-time departures of the Transit App (Karlsruher Verkehrsverbund).
+A Flask-based web application to track real-time departures of public transport.
 
 ## Features
 
