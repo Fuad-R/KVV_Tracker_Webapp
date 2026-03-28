@@ -1654,7 +1654,13 @@ function populateStationDropdown(stations) {
 
 function switchStation() {
     const dropdown = document.getElementById("stationDropdown");
-    const selected = JSON.parse(dropdown.value);
+    let selected = null;
+    try {
+        selected = JSON.parse(dropdown.value);
+    } catch (e) {
+        DevLog.error('STORAGE', 'Failed to parse station selection', { value: dropdown?.value, error: e.message });
+        return;
+    }
 
     // Track station switch from dropdown
     if (typeof umami !== 'undefined') {
@@ -1729,7 +1735,14 @@ function clearSearchInput() {
 
 function getFavorites() {
     const stored = localStorage.getItem(FAVORITES_KEY);
-    return stored ? JSON.parse(stored) : [];
+    if (!stored) return [];
+    try {
+        return JSON.parse(stored);
+    } catch (e) {
+        DevLog.error('STORAGE', 'Failed to parse favorites; clearing corrupted storage entry', { error: e.message });
+        localStorage.removeItem(FAVORITES_KEY);
+        return [];
+    }
 }
 
 function saveFavorites(favorites) {
@@ -1920,7 +1933,14 @@ function removeFavorite(index) {
 
 function getHomeStation() {
     const stored = localStorage.getItem(HOME_STATION_KEY);
-    return stored ? JSON.parse(stored) : null;
+    if (!stored) return null;
+    try {
+        return JSON.parse(stored);
+    } catch (e) {
+        DevLog.error('STORAGE', 'Failed to parse home station; clearing corrupted storage entry', { error: e.message });
+        localStorage.removeItem(HOME_STATION_KEY);
+        return null;
+    }
 }
 
 function setHomeStation() {
