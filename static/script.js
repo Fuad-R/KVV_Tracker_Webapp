@@ -1658,7 +1658,7 @@ function switchStation() {
     try {
         selected = JSON.parse(dropdown.value);
     } catch (e) {
-        DevLog.error('STORAGE', 'Failed to parse station selection', { value: dropdown?.value, error: e.message });
+        DevLog.error('STORAGE', 'Failed to parse station selection; station switch aborted', { value: dropdown?.value, error: e.message });
         return;
     }
 
