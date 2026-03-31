@@ -54,6 +54,23 @@ def set_security_headers(response):
     )
     if not DEV_MODE:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    dynamic_no_store_endpoints = {
+        "index",
+        "search",
+        "search_by_id",
+        "lookup_stop_by_coords",
+        "debug_login",
+        "debug_update",
+        "debug_clear",
+    }
+    if request.endpoint in dynamic_no_store_endpoints:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    elif request.endpoint in {"serve_sw", "serve_manifest"}:
+        response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+
     return response
 
 

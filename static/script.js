@@ -164,6 +164,18 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+function readStoredJson(key, fallbackValue) {
+    const stored = localStorage.getItem(key);
+    if (!stored) return fallbackValue;
+    try {
+        return JSON.parse(stored);
+    } catch (error) {
+        DevLog.error('STORAGE', `Invalid stored JSON for ${key}; clearing value`, error);
+        localStorage.removeItem(key);
+        return fallbackValue;
+    }
+}
+
 function parseFiltersSegment(segment) {
     if (!segment) return {};
     return segment.split(';').reduce((filters, entry) => {
@@ -1728,8 +1740,18 @@ function clearSearchInput() {
 // ------------------ FAVORITES ------------------
 
 function getFavorites() {
-    const stored = localStorage.getItem(FAVORITES_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const storedFavorites = readStoredJson(FAVORITES_KEY, []);
+    if (!Array.isArray(storedFavorites)) {
+        localStorage.removeItem(FAVORITES_KEY);
+        return [];
+    }
+    return storedFavorites.filter((favorite) => (
+        favorite &&
+        typeof favorite === "object" &&
+        favorite.id !== null &&
+        typeof favorite.id !== "undefined" &&
+        typeof favorite.name === "string"
+    ));
 }
 
 function saveFavorites(favorites) {
@@ -1919,8 +1941,18 @@ function removeFavorite(index) {
 // ------------------ HOME STATION ------------------
 
 function getHomeStation() {
-    const stored = localStorage.getItem(HOME_STATION_KEY);
-    return stored ? JSON.parse(stored) : null;
+    const home = readStoredJson(HOME_STATION_KEY, null);
+    if (!home || typeof home !== "object") {
+        return null;
+    }
+    if (home.id === null || typeof home.id === "undefined" || typeof home.name !== "string" || !home.name.trim()) {
+        localStorage.removeItem(HOME_STATION_KEY);
+        return null;
+    }
+    return {
+        id: home.id,
+        name: home.name.trim()
+    };
 }
 
 function setHomeStation() {
