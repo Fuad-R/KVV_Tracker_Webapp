@@ -80,6 +80,8 @@ let openMapPopupName = null;
 let isRefreshingMapMarkers = false;
 let mapOverpassRequestId = 0;
 const mapOverpassActiveRequests = new Set();
+let mapRefreshTimeout = null;
+let shouldInvalidateMapOnRefresh = false;
 const FAVORITES_KEY = 'transit_favorites';
 const FAVORITES_COLLAPSED_KEY = 'transit_favorites_collapsed';
 const HOME_STATION_KEY = 'transit_home_station';
@@ -2029,10 +2031,42 @@ function switchTab(tabId) {
     syncUrlFromState();
 }
 
+function scheduleMapMarkerRefresh({ invalidateSize = false, delayMs = 150 } = {}) {
+    if (!map) {
+        return;
+    }
+
+    shouldInvalidateMapOnRefresh = shouldInvalidateMapOnRefresh || invalidateSize;
+    if (mapRefreshTimeout) {
+        clearTimeout(mapRefreshTimeout);
+    }
+
+    mapRefreshTimeout = setTimeout(() => {
+        mapRefreshTimeout = null;
+        const mustInvalidate = shouldInvalidateMapOnRefresh;
+        shouldInvalidateMapOnRefresh = false;
+
+        if (mustInvalidate) {
+            DevLog.map('Invalidating map size before refreshing markers');
+            map.invalidateSize();
+        }
+
+        if (map.getZoom() >= 15) {
+            DevLog.map('Refreshing map markers for current view', {
+                zoom: map.getZoom(),
+                center: map.getCenter()
+            });
+            updateOverpassMarkers();
+        } else if (markersLayer) {
+            markersLayer.clearLayers();
+        }
+    }, delayMs);
+}
+
 function initMap() {
     if (map) {
-        DevLog.map('Map already initialized, invalidating size');
-        setTimeout(() => map.invalidateSize(), 100);
+        DevLog.map('Map already initialized, scheduling size invalidation and marker refresh');
+        scheduleMapMarkerRefresh({ invalidateSize: true });
         return;
     }
 
@@ -2083,17 +2117,13 @@ function initMap() {
         }
     });
 
-    map.on('moveend', () => {
-        if (map.getZoom() >= 15) {
-            updateOverpassMarkers();
-        } else {
-            markersLayer.clearLayers();
-        }
+    map.on('moveend zoomend resize', () => {
+        scheduleMapMarkerRefresh();
     });
 
-    if (map.getZoom() >= 15) {
-        updateOverpassMarkers();
-    }
+    // Leaflet maps rendered inside tabbed UIs frequently need one explicit
+    // invalidate pass once the tab becomes visible before marker placement is reliable.
+    scheduleMapMarkerRefresh({ invalidateSize: true });
 }
 
 // Helper function to normalize station names for grouping
