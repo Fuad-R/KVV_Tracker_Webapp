@@ -11,6 +11,7 @@ A Flask-based web application to track real-time departures of the Transit App (
 - **PWA Support**: Installable as a Progressive Web App with offline support via Service Workers.
 - **Debug Mode**: Advanced mode to override departure data (use `test-dev-debug` in search).
 - **Dark/Light Mode**: Theme support for better visibility.
+- **Nearby Stop Lookup**: Map stop selection resolves the nearest stop through the Transit Tracker API nearby-stops endpoint.
 - **Dockerized**: Easy deployment using Docker.
 
 ## Ranked Feature Ideas (User Need & Impact)
@@ -62,14 +63,6 @@ A Flask-based web application to track real-time departures of the Transit App (
    docker run -p 5000:5000 transit-tracker
    ```
 
-### Database configuration (map stop lookup)
-
-To enable coordinate-based map stop lookups, provide a PostgreSQL connection file at `/config/db_connection.txt` inside the container. Use `db_connection.txt.example` as a template for the contents and mount it when running Docker, for example:
-
-```bash
-docker run -p 5000:5000 -v /path/to/db_connection.txt:/config/db_connection.txt transit-tracker
-```
-
 ## Usage
 
 ### Station Search
@@ -94,3 +87,5 @@ To enable dev mode automatically (including Flask debug and UI debug tools), set
 ## API Reference
 
 The app uses an external API: `https://transitapi.fuadserver.uk/api`
+
+For map-based stop selection, the webapp now uses the nearby stop API endpoint and requests the single closest stop within 50 meters.
