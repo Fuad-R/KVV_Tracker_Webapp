@@ -71,6 +71,7 @@ let countdown = 30;
 let countdownInterval;
 let refreshInterval;
 let updatesPaused = false;
+let isDeparturesRefreshing = false;
 let lastDepartures = [];
 let map = null;
 let markersLayer = null;
@@ -832,14 +833,45 @@ function refreshDepartures(ignorePaused = true) {
     }
 }
 
+function renderCountdownBadge(label = null) {
+    const badge = document.getElementById("countdown");
+    if (!badge) return;
+
+    const resolvedLabel = typeof label === "string"
+        ? label
+        : (badge.dataset.label || "--");
+    badge.dataset.label = resolvedLabel;
+    badge.textContent = "";
+
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "countdown-label";
+    labelSpan.textContent = resolvedLabel;
+    badge.appendChild(labelSpan);
+
+    if (isDeparturesRefreshing) {
+        const spinner = document.createElement("span");
+        spinner.className = "countdown-spinner";
+        spinner.setAttribute("aria-hidden", "true");
+        badge.appendChild(spinner);
+    }
+}
+
+function setDeparturesRefreshing(isRefreshing) {
+    isDeparturesRefreshing = isRefreshing;
+    renderCountdownBadge();
+}
+
+function shouldShowSkeletonLoading(isUserSearch = false) {
+    return isUserSearch || lastDepartures.length === 0;
+}
+
 function updateCountdown() {
     if (updatesPaused) {
-        document.getElementById("countdown").innerText = "Paused";
+        renderCountdownBadge("Paused");
         return;
     }
-    const minutes = Math.floor(countdown / 60) || 0;
     const seconds = countdown % 60;
-    document.getElementById("countdown").innerText = `${seconds}s`;
+    renderCountdownBadge(`${seconds}s`);
     countdown--;
     if (countdown < 0) countdown = 30;
 }
@@ -877,7 +909,12 @@ function updateNow() {
 
 async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
     if (updatesPaused && !ignorePaused) return;
-    showSkeletonLoading();
+    const showSkeleton = shouldShowSkeletonLoading(isUserSearch);
+    if (showSkeleton) {
+        showSkeletonLoading();
+    } else {
+        setDeparturesRefreshing(true);
+    }
     closeError();
     
     if (searchTimeout) {
@@ -889,8 +926,10 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         searchTimeout = setTimeout(() => {
             showError("Search timed out, try again.");
         }, 10000);
-        // Clear the grid so we don't see old departures if a search fails
-        document.getElementById("departuresGrid").innerHTML = "";
+        if (showSkeleton) {
+            // Clear the grid so we don't see old departures if a new stop search fails
+            document.getElementById("departuresGrid").innerHTML = "";
+        }
     }
 
     try {
@@ -982,7 +1021,10 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
     } catch (e) {
         console.error(e);
     } finally {
-        hideSkeletonLoading();
+        if (showSkeleton) {
+            hideSkeletonLoading();
+        }
+        setDeparturesRefreshing(false);
     }
 }
 
@@ -990,7 +1032,12 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
 
 async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     if (updatesPaused && !ignorePaused) return;
-    showSkeletonLoading();
+    const showSkeleton = shouldShowSkeletonLoading(isUserSearch);
+    if (showSkeleton) {
+        showSkeletonLoading();
+    } else {
+        setDeparturesRefreshing(true);
+    }
     closeError();
 
     if (searchTimeout) {
@@ -1002,8 +1049,10 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
         searchTimeout = setTimeout(() => {
             showError("Search timed out, try again.");
         }, 10000);
-        // Clear the grid so we don't see old departures if a search fails
-        document.getElementById("departuresGrid").innerHTML = "";
+        if (showSkeleton) {
+            // Clear the grid so we don't see old departures if a new stop search fails
+            document.getElementById("departuresGrid").innerHTML = "";
+        }
     }
 
     try {
@@ -1049,7 +1098,10 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     } catch (e) {
         console.error(e);
     } finally {
-        hideSkeletonLoading();
+        if (showSkeleton) {
+            hideSkeletonLoading();
+        }
+        setDeparturesRefreshing(false);
     }
 }
 
