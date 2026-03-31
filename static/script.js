@@ -73,6 +73,7 @@ let refreshInterval;
 let updatesPaused = false;
 let isDeparturesRefreshing = false;
 let lastDepartures = [];
+let renderedStopKey = null;
 let map = null;
 let markersLayer = null;
 let userMarker = null;
@@ -861,8 +862,28 @@ function setDeparturesRefreshing(isRefreshing) {
     renderCountdownBadge();
 }
 
-function shouldShowSkeletonLoading(isUserSearch = false) {
-    return isUserSearch || lastDepartures.length === 0;
+function getCurrentStopKey() {
+    if (stopId) return `id:${stopId}`;
+    if (stopName) return `name:${stopName.trim().toLowerCase()}`;
+    return null;
+}
+
+function hasRenderedDeparturesBoard() {
+    const grid = document.getElementById("departuresGrid");
+    return !!(grid && grid.children.length > 0 && renderedStopKey);
+}
+
+function shouldShowSkeletonLoading(isUserSearch = false, targetStopKey = getCurrentStopKey()) {
+    if (!hasRenderedDeparturesBoard()) {
+        return true;
+    }
+    if (!isUserSearch) {
+        return false;
+    }
+    if (!targetStopKey || !renderedStopKey) {
+        return true;
+    }
+    return targetStopKey !== renderedStopKey;
 }
 
 function updateCountdown() {
@@ -909,7 +930,8 @@ function updateNow() {
 
 async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
     if (updatesPaused && !ignorePaused) return;
-    const showSkeleton = shouldShowSkeletonLoading(isUserSearch);
+    const targetStopKey = stopName ? `name:${stopName.trim().toLowerCase()}` : null;
+    const showSkeleton = shouldShowSkeletonLoading(isUserSearch, targetStopKey);
     if (showSkeleton) {
         showSkeletonLoading();
     } else {
@@ -1013,6 +1035,7 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
         }
 
         lastDepartures = result.departures;
+        renderedStopKey = stopId ? `id:${stopId}` : targetStopKey;
         applyFilter();
         countdown = 30;
         updateFavoriteButton();
@@ -1032,7 +1055,8 @@ async function fetchDepartures(ignorePaused = false, isUserSearch = false) {
 
 async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
     if (updatesPaused && !ignorePaused) return;
-    const showSkeleton = shouldShowSkeletonLoading(isUserSearch);
+    const targetStopKey = stopId ? `id:${stopId}` : null;
+    const showSkeleton = shouldShowSkeletonLoading(isUserSearch, targetStopKey);
     if (showSkeleton) {
         showSkeletonLoading();
     } else {
@@ -1090,6 +1114,7 @@ async function fetchDeparturesById(ignorePaused = false, isUserSearch = false) {
         }
 
         lastDepartures = result.departures;
+        renderedStopKey = stopId ? `id:${stopId}` : (result.station_name ? `name:${result.station_name.trim().toLowerCase()}` : null);
         applyFilter();
         countdown = 30;
         updateFavoriteButton();
