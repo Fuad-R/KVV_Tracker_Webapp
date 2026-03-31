@@ -83,7 +83,6 @@ const mapOverpassActiveRequests = new Set();
 const FAVORITES_KEY = 'transit_favorites';
 const FAVORITES_COLLAPSED_KEY = 'transit_favorites_collapsed';
 const HOME_STATION_KEY = 'transit_home_station';
-const EXPERIMENTAL_KEY = 'transit_experimental_enabled';
 const DEV_LOCATION_KEY = 'transit_dev_location_override';
 const NOTIFICATION_SETTINGS_DEFAULTS = {
     heightPercent: 100,
@@ -95,7 +94,6 @@ const APP_STORAGE_KEYS = [
     FAVORITES_KEY,
     FAVORITES_COLLAPSED_KEY,
     HOME_STATION_KEY,
-    EXPERIMENTAL_KEY,
     DEV_LOCATION_KEY,
     DEBUG_PASSWORD_KEY
 ];
@@ -366,8 +364,6 @@ function enableDebugUI() {
     setLeaveDebugButtonVisible(canLeaveDevMode());
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "block";
-
-    updateExperimentalUI();
 }
 
 async function loginDebug() {
@@ -437,16 +433,9 @@ function logoutDebug() {
     const devLocationBtn = document.getElementById("devLocationBtn");
     if (devLocationBtn) devLocationBtn.style.display = "none";
 
-    updateExperimentalUI();
-
     // If updates were paused, resume them
     if (updatesPaused) {
         togglePauseUpdates();
-    }
-
-    // Switch to departures tab if currently on map tab
-    if (document.getElementById("mapTab").classList.contains("active")) {
-        switchTab('departures');
     }
 
     // Re-render departures to remove edit buttons
@@ -497,51 +486,6 @@ function resetAppData() {
         umami.track('debug-reset-app-data');
     }
     window.location.reload();
-}
-
-// ------------------ EXPERIMENTAL FEATURES ------------------
-
-function toggleExperimentalFeatures() {
-    const isEnabled = document.getElementById("experimentalToggle").checked;
-    localStorage.setItem(EXPERIMENTAL_KEY, isEnabled);
-
-    // Track experimental features toggle
-    if (typeof umami !== 'undefined') {
-        umami.track('experimental-features-toggle', { enabled: isEnabled });
-    }
-
-    updateExperimentalUI();
-}
-
-function updateExperimentalUI() {
-    const isEnabled = localStorage.getItem(EXPERIMENTAL_KEY) === "true";
-    const mapBtn = document.getElementById("mapTabBtn");
-    const locateMeBtn = document.getElementById("locateMeBtn");
-    const devLocationBtn = document.getElementById("devLocationBtn");
-    const toggle = document.getElementById("experimentalToggle");
-    
-    if (toggle) toggle.checked = isEnabled;
-    
-    if (mapBtn) {
-        // If debugMode is on, it's always shown. Otherwise, depend on experimental toggle.
-        if (debugMode || isEnabled) {
-            mapBtn.style.display = "block";
-        } else {
-            mapBtn.style.display = "none";
-            // If we are currently on the map tab and experimental is disabled (and not in debug), switch away
-            if (document.getElementById("mapTab").classList.contains("active") && !debugMode) {
-                switchTab('departures');
-            }
-        }
-    }
-
-    if (locateMeBtn) {
-        locateMeBtn.style.display = (debugMode || isEnabled) ? "flex" : "none";
-    }
-
-    if (devLocationBtn) {
-        devLocationBtn.style.display = debugMode ? "block" : "none";
-    }
 }
 
 function openDebugEdit(stop_id, line, direction, stable_scheduled_time, minutes, delay) {
@@ -2822,8 +2766,6 @@ window.addEventListener("DOMContentLoaded", function() {
     });
 
     updateFavoritesDisplay();
-    updateExperimentalUI();
-
     // Auto-enable debug UI if dev mode is enabled or a password is saved
     if (debugMode) {
         enableDebugUI();

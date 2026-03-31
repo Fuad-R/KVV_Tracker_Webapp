@@ -35,7 +35,7 @@
             </h1>
             <div class="header-tabs">
                 <button class="tab-btn active" onclick="switchTab('departures')">Departures</button>
-                <button class="tab-btn" id="mapTabBtn" onclick="switchTab('map')" style="display: none;">Map</button>
+                <button class="tab-btn" id="mapTabBtn" onclick="switchTab('map')">Map</button>
             </div>
             <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">
                 <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -82,7 +82,7 @@
                             oninput="toggleClearButton()"
                         >
                         <button id="clearInputBtn" class="clear-btn" onclick="clearSearchInput()" title="Clear search">×</button>
-                        <button class="locate-me-btn-icon" id="locateMeBtn" onclick="locateNearestStation()" title="Locate nearest station" style="display: none;">
+                        <button class="locate-me-btn-icon" id="locateMeBtn" onclick="locateNearestStation()" title="Locate nearest station">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                                 <circle cx="12" cy="10" r="3"></circle>
@@ -161,13 +161,6 @@
                         <span class="toggle-slider"></span>
                         <span class="wheelchair-emoji">♿</span>
                     </label>
-                    <div class="experimental-toggle-container">
-                        <label class="experimental-toggle">
-                            <input type="checkbox" id="experimentalToggle" onchange="toggleExperimentalFeatures()">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span class="experimental-label">Enable Experimental Features</span>
-                    </div>
                 </div>
 
                 <!-- Station Dropdown -->
